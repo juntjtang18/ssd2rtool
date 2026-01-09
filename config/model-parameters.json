@@ -1,19 +1,24 @@
 {
   "version": 1,
   "defaults": {
-    "Dc": 0.0714285714,
+    "Dc": 0.0857142857,
     "Ds": 0.0952380952,
     "Dn": 0.0952380952,
 
-    "tC_min": 2,
+    "tC_min": 2.5,
     "tS_min": 2,
     "tN_min": 2,
 
     "extras": [
-      { "name": "Ral", "priceIst": 0.0625, "dropPerRun": 0.2 },
-      { "name": "Hel", "priceIst": 0.0833333333, "dropPerRun": 0.08 },
-      { "name": "Perfect Gem", "priceIst": 0.0333333333, "dropPerRun": 0 }
+      { "name": "FGs", "priceIst": 0.011, "dropPerRun": 0.0809523810 },
+      { "name": "FAs", "priceIst": 0.033, "dropPerRun": 0.0190476190 },
+      { "name": "Hel", "priceIst": 0.083, "dropPerRun": 0.0857142857 },
+      { "name": "Ral", "priceIst": 0.063, "dropPerRun": 0.1904761905 },
+      { "name": "Tal", "priceIst": 0.021, "dropPerRun": 0.2000000000 },
+
+      { "name": "Bonus Ist", "priceIst": 1.0, "dropPerRun": 0.0095238095 },
+      { "name": "Bonus Um", "priceIst": 0.25, "dropPerRun": 0.0047619048 },
+      { "name": "Bonus Mal", "priceIst": 0.5, "dropPerRun": 0.0047619048 }
     ]
   }
 }
-
