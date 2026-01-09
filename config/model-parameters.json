@@ -1,1 +1,19 @@
+{
+  "version": 1,
+  "defaults": {
+    "Dc": 0.0714285714,
+    "Ds": 0.0952380952,
+    "Dn": 0.0952380952,
+
+    "tC_min": 2,
+    "tS_min": 2,
+    "tN_min": 2,
+
+    "extras": [
+      { "name": "Ral", "priceIst": 0.0625, "dropPerRun": 0 },
+      { "name": "Hel", "priceIst": 0.0833333333, "dropPerRun": 0 },
+      { "name": "Perfect Gem", "priceIst": 0.0333333333, "dropPerRun": 0 }
+    ]
+  }
+}
 
