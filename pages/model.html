@@ -1,1 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SSD2R Tool — Model</title>
+  <style>
+    :root { --bg:#0b0d10; --card:#12161c; --text:#e7eef7; --muted:#9db0c6; --line:#223041; --accent:#7bdcff; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 22px 16px 40px; }
+    h1 { margin: 6px 0 6px; font-size: 20px; }
+    .sub { color:var(--muted); margin: 0 0 16px; line-height: 1.55; white-space: pre-line; }
+    .grid { display:grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 860px){ .grid { grid-template-columns: 1fr 1fr; } }
+    .card { background:var(--card); border:1px solid var(--line); border-radius: 14px; padding: 14px; }
+    .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); font-weight: 650; }
+    .row { display:flex; gap:10px; align-items:center; margin: 10px 0; }
+    label { flex: 1; color:var(--muted); font-size: 13px; }
+    input { width: 180px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
+    .btn { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: var(--accent); color:#05202a; font-weight: 900; cursor:pointer; margin-top: 6px; }
+    .hr { height:1px; background:var(--line); margin: 10px 0; border:0; }
+    .outBig { font-size: 30px; font-weight: 950; margin: 6px 0 2px; }
+    .tiny { color:var(--muted); font-size: 12px; line-height: 1.55; white-space: pre-line; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    details { border: 1px solid var(--line); border-radius: 12px; padding: 10px 10px; background: #0f1318; }
+    summary { cursor: pointer; color: var(--text); font-weight: 700; list-style: none; }
+    summary::-webkit-details-marker { display:none; }
+    .pill { display:inline-block; padding: 2px 8px; border:1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>SSD2R Tool — Keyset Pipeline Model</h1>
+    <p class="sub">
+Input Y (Ist). Output X (keysets), runs needed (C/S/N), and total hours using default min/run.
+Defaults load from <span class="mono">/config/model-parameters.json</span>.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Input</h2>
+
+        <div class="row">
+          <label>Target Y (Ist)</label>
+          <input id="Y" type="number" step="0.1" value="41.0">
+        </div>
+
+        <div class="row">
+          <label>Hours/day (optional)</label>
+          <input id="hpd" type="number" step="0.5" value="4">
+        </div>
+
+        <details style="margin-top:12px;">
+          <summary>
+            Parameters
+            <span class="pill" id="cfgStatus">loading…</span>
+          </summary>
+
+          <div style="margin-top:10px;">
+            <div class="row">
+              <label>Dc (Countess keys/run)</label>
+              <input id="Dc" type="number" step="0.0001">
+            </div>
+            <div class="row">
+              <label>Ds (Summoner keys/run)</label>
+              <input id="Ds" type="number" step="0.0001">
+            </div>
+            <div class="row">
+              <label>Dn (Nihl keys/run)</label>
+              <input id="Dn" type="number" step="0.0001">
+            </div>
+
+            <hr class="hr" />
+
+            <div class="row">
+              <label>tC (min/run)</label>
+              <input id="tC_min" type="number" step="0.1">
+            </div>
+            <div class="row">
+              <label>tS (min/run)</label>
+              <input id="tS_min" type="number" step="0.1">
+            </div>
+            <div class="row">
+              <label>tN (min/run)</label>
+              <input id="tN_min" type="number" step="0.1">
+            </div>
+
+            <p class="tiny">Extras are supported in config/model-parameters.json, but not edited here (yet).</p>
+          </div>
+        </details>
+
+        <button class="btn" id="calc">Calculate</button>
+
+        <p class="tiny">
+<a href="../index.html">← Back to home</a>
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Outputs</h2>
+
+        <div class="tiny">Keysets needed (X)</div>
+        <div class="outBig"><span id="X">—</span> <span class="tiny">keysets</span></div>
+
+        <div class="tiny mono" id="runsLine">—</div>
+
+        <hr class="hr"/>
+
+        <div class="tiny">Time</div>
+        <div class="outBig"><span id="hours">—</span> <span class="tiny">hours</span></div>
+        <div class="tiny" id="daysLine">—</div>
+
+        <hr class="hr"/>
+
+        <div class="tiny">Rates</div>
+        <div class="tiny mono" id="rateLine">—</div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { compute } from "../model/keysPipeline.js";
+
+    const els = {
+      Y: document.getElementById("Y"),
+      hpd: document.getElementById("hpd"),
+      Dc: document.getElementById("Dc"),
+      Ds: document.getElementById("Ds"),
+      Dn: document.getElementById("Dn"),
+      tC_min: document.getElementById("tC_min"),
+      tS_min: document.getElementById("tS_min"),
+      tN_min: document.getElementById("tN_min"),
+      cfgStatus: document.getElementById("cfgStatus"),
+
+      X: document.getElementById("X"),
+      runsLine: document.getElementById("runsLine"),
+      hours: document.getElementById("hours"),
+      daysLine: document.getElementById("daysLine"),
+      rateLine: document.getElementById("rateLine"),
+      calc: document.getElementById("calc")
+    };
+
+    function num(el) {
+      const n = parseFloat(el.value);
+      return Number.isFinite(n) ? n : NaN;
+    }
+    function fmt(x, d=2) {
+      return (Number.isFinite(x) ? x.toFixed(d) : "—");
+    }
+
+    let defaults = null;
+
+    async function loadDefaults() {
+      try {
+        const res = await fetch("../config/model-parameters.json", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        defaults = json.defaults;
+
+        els.Dc.value = defaults.Dc;
+        els.Ds.value = defaults.Ds;
+        els.Dn.value = defaults.Dn;
+
+        els.tC_min.value = defaults.tC_min;
+        els.tS_min.value = defaults.tS_min;
+        els.tN_min.value = defaults.tN_min;
+
+        els.cfgStatus.textContent = "loaded";
+      } catch (e) {
+        els.cfgStatus.textContent = "failed";
+        console.error(e);
+      }
+    }
+
+    function calculate() {
+      try {
+        const out = compute({
+          Y: num(els.Y),
+          Dc: num(els.Dc),
+          Ds: num(els.Ds),
+          Dn: num(els.Dn),
+          tC_min: num(els.tC_min),
+          tS_min: num(els.tS_min),
+          tN_min: num(els.tN_min),
+          extras: (defaults && Array.isArray(defaults.extras)) ? defaults.extras : []
+        });
+
+        els.X.textContent = fmt(out.X, 2);
+        els.runsLine.textContent = `Runs: Rc=${fmt(out.Rc, 0)} | Rs=${fmt(out.Rs, 0)} | Rn=${fmt(out.Rn, 0)}`;
+
+        els.hours.textContent = fmt(out.totalHours, 2);
+
+        const hpd = num(els.hpd);
+        if (Number.isFinite(hpd) && hpd > 0) {
+          els.daysLine.textContent = `≈ ${fmt(out.totalHours / hpd, 2)} days (at ${fmt(hpd, 1)} h/day)`;
+        } else {
+          els.daysLine.textContent = "—";
+        }
+
+        els.rateLine.textContent =
+          `Ist/hour ≈ ${fmt(out.istPerHour, 3)} | VextraC ≈ ${fmt(out.VextraC, 4)} (Ist/run from Countess extras)`;
+      } catch (e) {
+        els.X.textContent = "—";
+        els.runsLine.textContent = "—";
+        els.hours.textContent = "—";
+        els.daysLine.textContent = "—";
+        els.rateLine.textContent = e.message || "Error";
+      }
+    }
+
+    await loadDefaults();
+    calculate();
+
+    els.calc.addEventListener("click", calculate);
+    ["Y","hpd","Dc","Ds","Dn","tC_min","tS_min","tN_min"].forEach(id => {
+      els[id].addEventListener("input", calculate);
+    });
+  </script>
+</body>
+</html>
 
