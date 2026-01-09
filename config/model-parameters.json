@@ -10,8 +10,8 @@
     "tN_min": 2,
 
     "extras": [
-      { "name": "Ral", "priceIst": 0.0625, "dropPerRun": 0 },
-      { "name": "Hel", "priceIst": 0.0833333333, "dropPerRun": 0 },
+      { "name": "Ral", "priceIst": 0.0625, "dropPerRun": 0.2 },
+      { "name": "Hel", "priceIst": 0.0833333333, "dropPerRun": 0.08 },
       { "name": "Perfect Gem", "priceIst": 0.0333333333, "dropPerRun": 0 }
     ]
   }
