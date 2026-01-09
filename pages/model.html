@@ -133,104 +133,142 @@ Defaults load from <span class="mono">/config/model-parameters.json</span>.
     </div>
   </div>
 
-  <script type="module">
-    import { compute } from "../model/keysPipeline.js";
+<script type="module">
+  import { computeFromIst, computeFromHours } from "../model/keysPipeline.js";
 
-    const els = {
-      Y: document.getElementById("Y"),
-      hpd: document.getElementById("hpd"),
-      Dc: document.getElementById("Dc"),
-      Ds: document.getElementById("Ds"),
-      Dn: document.getElementById("Dn"),
-      tC_min: document.getElementById("tC_min"),
-      tS_min: document.getElementById("tS_min"),
-      tN_min: document.getElementById("tN_min"),
-      cfgStatus: document.getElementById("cfgStatus"),
+  const els = {
+    Y: document.getElementById("Y"),
+    hpd: document.getElementById("hpd"),
+    hoursInput: document.getElementById("hoursInput"),
+    hoursRow: document.getElementById("hoursRow"),
 
-      X: document.getElementById("X"),
-      runsLine: document.getElementById("runsLine"),
-      hours: document.getElementById("hours"),
-      daysLine: document.getElementById("daysLine"),
-      rateLine: document.getElementById("rateLine"),
-      calc: document.getElementById("calc")
-    };
+    Dc: document.getElementById("Dc"),
+    Ds: document.getElementById("Ds"),
+    Dn: document.getElementById("Dn"),
+    tC_min: document.getElementById("tC_min"),
+    tS_min: document.getElementById("tS_min"),
+    tN_min: document.getElementById("tN_min"),
+    cfgStatus: document.getElementById("cfgStatus"),
 
-    function num(el) {
-      const n = parseFloat(el.value);
-      return Number.isFinite(n) ? n : NaN;
+    X: document.getElementById("X"),
+    runsLine: document.getElementById("runsLine"),
+    hours: document.getElementById("hours"),
+    daysLine: document.getElementById("daysLine"),
+    rateLine: document.getElementById("rateLine"),
+
+    calc: document.getElementById("calc")
+  };
+
+  function num(el) {
+    const n = parseFloat(el.value);
+    return Number.isFinite(n) ? n : NaN;
+  }
+  function fmt(x, d=2) {
+    return (Number.isFinite(x) ? x.toFixed(d) : "—");
+  }
+  function getMode() {
+    return document.querySelector('input[name="mode"]:checked')?.value || "ist";
+  }
+
+  let defaults = null;
+
+  async function loadDefaults() {
+    try {
+      const res = await fetch("../config/model-parameters.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      defaults = json.defaults;
+
+      els.Dc.value = defaults.Dc;
+      els.Ds.value = defaults.Ds;
+      els.Dn.value = defaults.Dn;
+
+      els.tC_min.value = defaults.tC_min;
+      els.tS_min.value = defaults.tS_min;
+      els.tN_min.value = defaults.tN_min;
+
+      els.cfgStatus.textContent = "loaded";
+    } catch (e) {
+      els.cfgStatus.textContent = "failed";
+      console.error(e);
     }
-    function fmt(x, d=2) {
-      return (Number.isFinite(x) ? x.toFixed(d) : "—");
-    }
+  }
 
-    let defaults = null;
+  function calculate() {
+    try {
+      const mode = getMode();
 
-    async function loadDefaults() {
-      try {
-        const res = await fetch("../config/model-parameters.json", { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        defaults = json.defaults;
+      const baseParams = {
+        Dc: num(els.Dc),
+        Ds: num(els.Ds),
+        Dn: num(els.Dn),
+        tC_min: num(els.tC_min),
+        tS_min: num(els.tS_min),
+        tN_min: num(els.tN_min),
+        extras: (defaults && Array.isArray(defaults.extras)) ? defaults.extras : []
+      };
 
-        els.Dc.value = defaults.Dc;
-        els.Ds.value = defaults.Ds;
-        els.Dn.value = defaults.Dn;
-
-        els.tC_min.value = defaults.tC_min;
-        els.tS_min.value = defaults.tS_min;
-        els.tN_min.value = defaults.tN_min;
-
-        els.cfgStatus.textContent = "loaded";
-      } catch (e) {
-        els.cfgStatus.textContent = "failed";
-        console.error(e);
+      let out;
+      if (mode === "hours") {
+        out = computeFromHours({ ...baseParams, hours: num(els.hoursInput) });
+      } else {
+        out = computeFromIst({ ...baseParams, Y: num(els.Y) });
       }
-    }
 
-    function calculate() {
-      try {
-        const out = compute({
-          Y: num(els.Y),
-          Dc: num(els.Dc),
-          Ds: num(els.Ds),
-          Dn: num(els.Dn),
-          tC_min: num(els.tC_min),
-          tS_min: num(els.tS_min),
-          tN_min: num(els.tN_min),
-          extras: (defaults && Array.isArray(defaults.extras)) ? defaults.extras : []
-        });
+      els.X.textContent = fmt(out.X, 2);
+      els.runsLine.textContent = `Runs: Rc=${fmt(out.Rc, 0)} | Rs=${fmt(out.Rs, 0)} | Rn=${fmt(out.Rn, 0)}`;
 
-        els.X.textContent = fmt(out.X, 2);
-        els.runsLine.textContent = `Runs: Rc=${fmt(out.Rc, 0)} | Rs=${fmt(out.Rs, 0)} | Rn=${fmt(out.Rn, 0)}`;
+      // total hours implied by X (in fromHours this should match hours input closely)
+      els.hours.textContent = fmt(out.totalHours, 2);
 
-        els.hours.textContent = fmt(out.totalHours, 2);
-
-        const hpd = num(els.hpd);
-        if (Number.isFinite(hpd) && hpd > 0) {
-          els.daysLine.textContent = `≈ ${fmt(out.totalHours / hpd, 2)} days (at ${fmt(hpd, 1)} h/day)`;
-        } else {
-          els.daysLine.textContent = "—";
-        }
-
-        els.rateLine.textContent =
-          `Ist/hour ≈ ${fmt(out.istPerHour, 3)} | VextraC ≈ ${fmt(out.VextraC, 4)} (Ist/run from Countess extras)`;
-      } catch (e) {
-        els.X.textContent = "—";
-        els.runsLine.textContent = "—";
-        els.hours.textContent = "—";
+      // days line: only meaningful if user gives hours/day
+      const hpd = num(els.hpd);
+      if (Number.isFinite(hpd) && hpd > 0) {
+        els.daysLine.textContent = `≈ ${fmt(out.totalHours / hpd, 2)} days (at ${fmt(hpd, 1)} h/day)`;
+      } else {
         els.daysLine.textContent = "—";
-        els.rateLine.textContent = e.message || "Error";
       }
+
+      // show either "earned Ist" or "target Ist"
+      if (out.mode === "fromHours") {
+        els.rateLine.textContent =
+          `Earned Ist ≈ ${fmt(out.Y_total, 2)} | Ist/hour ≈ ${fmt(out.istPerHour, 3)} | VextraC ≈ ${fmt(out.VextraC, 4)} Ist/run(C)`;
+      } else {
+        els.rateLine.textContent =
+          `Ist/hour ≈ ${fmt(out.istPerHour, 3)} | Extras ≈ ${fmt(out.extrasIst, 2)} Ist | VextraC ≈ ${fmt(out.VextraC, 4)} Ist/run(C)`;
+      }
+    } catch (e) {
+      els.X.textContent = "—";
+      els.runsLine.textContent = "—";
+      els.hours.textContent = "—";
+      els.daysLine.textContent = "—";
+      els.rateLine.textContent = e.message || "Error";
     }
+  }
 
-    await loadDefaults();
+  function syncModeUI() {
+    const mode = getMode();
+    els.hoursRow.style.display = (mode === "hours") ? "" : "none";
+    // You can also disable Y input in hours mode:
+    els.Y.disabled = (mode === "hours");
     calculate();
+  }
 
-    els.calc.addEventListener("click", calculate);
-    ["Y","hpd","Dc","Ds","Dn","tC_min","tS_min","tN_min"].forEach(id => {
-      els[id].addEventListener("input", calculate);
-    });
-  </script>
+  await loadDefaults();
+  syncModeUI();
+
+  els.calc.addEventListener("click", calculate);
+
+  ["Y","hpd","hoursInput","Dc","Ds","Dn","tC_min","tS_min","tN_min"].forEach(id => {
+    const el = els[id];
+    if (el) el.addEventListener("input", calculate);
+  });
+
+  document.querySelectorAll('input[name="mode"]').forEach(r => {
+    r.addEventListener("change", syncModeUI);
+  });
+</script>
+
 </body>
 </html>
 
