@@ -117,6 +117,19 @@ Defaults load from <span class="mono">/config/model-parameters.json</span>.
         <div class="tiny">Rates</div>
         <div class="tiny mono" id="rateLine">—</div>
       </div>
+      <div class="row">
+  <label>Mode</label>
+  <div style="width:180px; display:flex; gap:10px; justify-content:flex-end;">
+    <label class="tiny"><input type="radio" name="mode" value="ist" checked> Y → runs</label>
+    <label class="tiny"><input type="radio" name="mode" value="hours"> hours → Ist</label>
+  </div>
+</div>
+
+<div class="row" id="hoursRow" style="display:none;">
+  <label>Total hours (input)</label>
+  <input id="hoursInput" type="number" step="0.5" value="10">
+</div>
+
     </div>
   </div>
 
