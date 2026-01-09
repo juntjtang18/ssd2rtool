@@ -3,202 +3,243 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SSD2R Tool — Model</title>
+  <title>SSD2R Tool — Keyset Pipeline Model</title>
   <style>
     :root { --bg:#0b0d10; --card:#12161c; --text:#e7eef7; --muted:#9db0c6; --line:#223041; --accent:#7bdcff; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
-    .wrap { max-width: 920px; margin: 0 auto; padding: 22px 16px 40px; }
-    h1 { margin: 6px 0 6px; font-size: 20px; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 22px 16px 40px; }
+    h1 { margin: 6px 0 8px; font-size: 22px; }
     .sub { color:var(--muted); margin: 0 0 16px; line-height: 1.55; white-space: pre-line; }
-    .grid { display:grid; grid-template-columns: 1fr; gap: 12px; }
-    @media (min-width: 860px){ .grid { grid-template-columns: 1fr 1fr; } }
+    .grid { display:grid; grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width: 980px){ .grid { grid-template-columns: 1fr 1fr; } }
     .card { background:var(--card); border:1px solid var(--line); border-radius: 14px; padding: 14px; }
-    .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); font-weight: 650; }
+    .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); font-weight: 700; }
     .row { display:flex; gap:10px; align-items:center; margin: 10px 0; }
     label { flex: 1; color:var(--muted); font-size: 13px; }
-    input { width: 180px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
-    .btn { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: var(--accent); color:#05202a; font-weight: 900; cursor:pointer; margin-top: 6px; }
-    .hr { height:1px; background:var(--line); margin: 10px 0; border:0; }
-    .outBig { font-size: 30px; font-weight: 950; margin: 6px 0 2px; }
+    input { width: 200px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
+    .btn { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: var(--accent); color:#05202a; font-weight: 900; cursor:pointer; margin-top: 8px; }
+    .hr { height:1px; background:var(--line); margin: 12px 0; border:0; }
+    .outBig { font-size: 34px; font-weight: 950; margin: 8px 0 4px; }
     .tiny { color:var(--muted); font-size: 12px; line-height: 1.55; white-space: pre-line; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
     details { border: 1px solid var(--line); border-radius: 12px; padding: 10px 10px; background: #0f1318; }
-    summary { cursor: pointer; color: var(--text); font-weight: 700; list-style: none; }
+    summary { cursor: pointer; color: var(--text); font-weight: 800; list-style: none; }
     summary::-webkit-details-marker { display:none; }
-    .pill { display:inline-block; padding: 2px 8px; border:1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; }
+    .pill { display:inline-block; padding: 2px 8px; border:1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; margin-left: 8px; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
+    .sectionTitle { margin: 10px 0 6px; font-weight: 900; color: var(--text); }
+    .twoCol { display:grid; grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width: 980px){ .twoCol { grid-template-columns: 1fr 1fr; } }
+    .warn { color: #ffd27d; }
   </style>
 </head>
+
 <body>
   <div class="wrap">
     <h1>SSD2R Tool — Keyset Pipeline Model</h1>
     <p class="sub">
-Input Y (Ist). Output X (keysets), runs needed (C/S/N), and total hours using default min/run.
-Defaults load from <span class="mono">/config/model-parameters.json</span>.
+Two calculators using the same model + centralized parameters:
+(1) Target Ist → required hours + runs (C/S/N)
+(2) Target hours → earned Ist + runs (C/S/N)
     </p>
 
+    <!-- Shared Parameters -->
+    <details open>
+      <summary>
+        Shared parameters (loaded from <span class="mono">/config/model-parameters.json</span>)
+        <span class="pill" id="cfgStatus">loading…</span>
+      </summary>
+
+      <div style="margin-top:10px;" class="twoCol">
+        <div class="card" style="margin:0;">
+          <h2>Key drop rates (keys/run)</h2>
+          <div class="row">
+            <label>Dc (Countess)</label>
+            <input id="Dc" type="number" step="0.0001">
+          </div>
+          <div class="row">
+            <label>Ds (Summoner)</label>
+            <input id="Ds" type="number" step="0.0001">
+          </div>
+          <div class="row">
+            <label>Dn (Nihlathak)</label>
+            <input id="Dn" type="number" step="0.0001">
+          </div>
+          <p class="tiny">Runs are computed as: Rc=X/Dc, Rs=X/Ds, Rn=X/Dn</p>
+        </div>
+
+        <div class="card" style="margin:0;">
+          <h2>Run times (min/run)</h2>
+          <div class="row">
+            <label>tC (Countess)</label>
+            <input id="tC_min" type="number" step="0.1">
+          </div>
+          <div class="row">
+            <label>tS (Summoner)</label>
+            <input id="tS_min" type="number" step="0.1">
+          </div>
+          <div class="row">
+            <label>tN (Nihlathak)</label>
+            <input id="tN_min" type="number" step="0.1">
+          </div>
+
+          <div class="row">
+            <label>Hours/day (optional, for “days” display)</label>
+            <input id="hpd" type="number" step="0.5" value="4">
+          </div>
+        </div>
+      </div>
+
+      <div class="tiny" id="extrasNote" style="margin-top:10px;"></div>
+    </details>
+
+    <div class="sectionTitle">1) Target Ist → required hours + runs</div>
     <div class="grid">
+      <!-- IST INPUT -->
       <div class="card">
         <h2>Input</h2>
 
         <div class="row">
-          <label>Target Y (Ist)</label>
-          <input id="Y" type="number" step="0.1" value="41.0">
+          <label>Target Ist (Y)</label>
+          <input id="Y" type="number" step="0.1" value="45">
         </div>
 
-        <div class="row">
-          <label>Hours/day (optional)</label>
-          <input id="hpd" type="number" step="0.5" value="4">
-        </div>
-
-        <details style="margin-top:12px;">
-          <summary>
-            Parameters
-            <span class="pill" id="cfgStatus">loading…</span>
-          </summary>
-
-          <div style="margin-top:10px;">
-            <div class="row">
-              <label>Dc (Countess keys/run)</label>
-              <input id="Dc" type="number" step="0.0001">
-            </div>
-            <div class="row">
-              <label>Ds (Summoner keys/run)</label>
-              <input id="Ds" type="number" step="0.0001">
-            </div>
-            <div class="row">
-              <label>Dn (Nihl keys/run)</label>
-              <input id="Dn" type="number" step="0.0001">
-            </div>
-
-            <hr class="hr" />
-
-            <div class="row">
-              <label>tC (min/run)</label>
-              <input id="tC_min" type="number" step="0.1">
-            </div>
-            <div class="row">
-              <label>tS (min/run)</label>
-              <input id="tS_min" type="number" step="0.1">
-            </div>
-            <div class="row">
-              <label>tN (min/run)</label>
-              <input id="tN_min" type="number" step="0.1">
-            </div>
-
-            <p class="tiny">Extras are supported in config/model-parameters.json, but not edited here (yet).</p>
-          </div>
-        </details>
-
-        <button class="btn" id="calc">Calculate</button>
+        <button class="btn" id="calcIst">Calculate</button>
 
         <p class="tiny">
 <a href="../index.html">← Back to home</a>
         </p>
       </div>
 
+      <!-- IST OUTPUT -->
       <div class="card">
-        <h2>Outputs</h2>
+        <h2>Output</h2>
 
-        <div class="tiny">Keysets needed (X)</div>
-        <div class="outBig"><span id="X">—</span> <span class="tiny">keysets</span></div>
-
-        <div class="tiny mono" id="runsLine">—</div>
-
-        <hr class="hr"/>
-
-        <div class="tiny">Time</div>
-        <div class="outBig"><span id="hours">—</span> <span class="tiny">hours</span></div>
-        <div class="tiny" id="daysLine">—</div>
+        <div class="tiny">Required hours</div>
+        <div class="outBig"><span id="needHours">—</span> <span class="tiny">hours</span></div>
+        <div class="tiny" id="needDays">—</div>
 
         <hr class="hr"/>
 
-        <div class="tiny">Rates</div>
-        <div class="tiny mono" id="rateLine">—</div>
+        <div class="tiny mono" id="needRuns">Runs: —</div>
+
+        <hr class="hr"/>
+
+        <div class="tiny mono" id="needDetails">—</div>
+        <div class="tiny warn" id="needWarn"></div>
       </div>
-      <div class="row">
-  <label>Mode</label>
-  <div style="width:180px; display:flex; gap:10px; justify-content:flex-end;">
-    <label class="tiny"><input type="radio" name="mode" value="ist" checked> Y → runs</label>
-    <label class="tiny"><input type="radio" name="mode" value="hours"> hours → Ist</label>
-  </div>
-</div>
-
-<div class="row" id="hoursRow" style="display:none;">
-  <label>Total hours (input)</label>
-  <input id="hoursInput" type="number" step="0.5" value="10">
-</div>
-
     </div>
+
+    <div class="sectionTitle" style="margin-top:18px;">2) Target hours → earned Ist + runs</div>
+    <div class="grid">
+      <!-- HOURS INPUT -->
+      <div class="card">
+        <h2>Input</h2>
+
+        <div class="row">
+          <label>Total hours (H)</label>
+          <input id="H" type="number" step="0.5" value="20">
+        </div>
+
+        <button class="btn" id="calcHours">Calculate</button>
+
+        <p class="tiny">This section answers: “If I farm H hours, how many Ist do I earn?”</p>
+      </div>
+
+      <!-- HOURS OUTPUT -->
+      <div class="card">
+        <h2>Output</h2>
+
+        <div class="tiny">Earned Ist</div>
+        <div class="outBig"><span id="earnIst">—</span> <span class="tiny">Ist</span></div>
+        <div class="tiny" id="earnDays">—</div>
+
+        <hr class="hr"/>
+
+        <div class="tiny mono" id="earnRuns">Runs: —</div>
+
+        <hr class="hr"/>
+
+        <div class="tiny mono" id="earnDetails">—</div>
+        <div class="tiny warn" id="earnWarn"></div>
+      </div>
+    </div>
+
   </div>
 
-<script type="module">
-  import { computeFromIst, computeFromHours } from "../model/keysPipeline.js";
+  <script type="module">
+    import { computeFromIst, computeFromHours } from "../model/keysPipeline.js";
 
-  const els = {
-    Y: document.getElementById("Y"),
-    hpd: document.getElementById("hpd"),
-    hoursInput: document.getElementById("hoursInput"),
-    hoursRow: document.getElementById("hoursRow"),
+    const el = (id) => document.getElementById(id);
+    const els = {
+      cfgStatus: el("cfgStatus"),
+      extrasNote: el("extrasNote"),
 
-    Dc: document.getElementById("Dc"),
-    Ds: document.getElementById("Ds"),
-    Dn: document.getElementById("Dn"),
-    tC_min: document.getElementById("tC_min"),
-    tS_min: document.getElementById("tS_min"),
-    tN_min: document.getElementById("tN_min"),
-    cfgStatus: document.getElementById("cfgStatus"),
+      Dc: el("Dc"), Ds: el("Ds"), Dn: el("Dn"),
+      tC_min: el("tC_min"), tS_min: el("tS_min"), tN_min: el("tN_min"),
+      hpd: el("hpd"),
 
-    X: document.getElementById("X"),
-    runsLine: document.getElementById("runsLine"),
-    hours: document.getElementById("hours"),
-    daysLine: document.getElementById("daysLine"),
-    rateLine: document.getElementById("rateLine"),
+      Y: el("Y"),
+      H: el("H"),
 
-    calc: document.getElementById("calc")
-  };
+      needHours: el("needHours"),
+      needDays: el("needDays"),
+      needRuns: el("needRuns"),
+      needDetails: el("needDetails"),
+      needWarn: el("needWarn"),
 
-  function num(el) {
-    const n = parseFloat(el.value);
-    return Number.isFinite(n) ? n : NaN;
-  }
-  function fmt(x, d=2) {
-    return (Number.isFinite(x) ? x.toFixed(d) : "—");
-  }
-  function getMode() {
-    return document.querySelector('input[name="mode"]:checked')?.value || "ist";
-  }
+      earnIst: el("earnIst"),
+      earnDays: el("earnDays"),
+      earnRuns: el("earnRuns"),
+      earnDetails: el("earnDetails"),
+      earnWarn: el("earnWarn"),
 
-  let defaults = null;
+      calcIst: el("calcIst"),
+      calcHours: el("calcHours"),
+    };
 
-  async function loadDefaults() {
-    try {
-      const res = await fetch("../config/model-parameters.json", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      defaults = json.defaults;
+    const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
+    const num = (inputEl) => {
+      const n = parseFloat(inputEl.value);
+      return Number.isFinite(n) ? n : NaN;
+    };
 
-      els.Dc.value = defaults.Dc;
-      els.Ds.value = defaults.Ds;
-      els.Dn.value = defaults.Dn;
+    let defaults = null;
 
-      els.tC_min.value = defaults.tC_min;
-      els.tS_min.value = defaults.tS_min;
-      els.tN_min.value = defaults.tN_min;
+    async function loadDefaults() {
+      try {
+        const res = await fetch("../config/model-parameters.json", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        defaults = json.defaults;
 
-      els.cfgStatus.textContent = "loaded";
-    } catch (e) {
-      els.cfgStatus.textContent = "failed";
-      console.error(e);
+        els.Dc.value = defaults.Dc;
+        els.Ds.value = defaults.Ds;
+        els.Dn.value = defaults.Dn;
+
+        els.tC_min.value = defaults.tC_min;
+        els.tS_min.value = defaults.tS_min;
+        els.tN_min.value = defaults.tN_min;
+
+        // Extras note (so it's obvious whether extras are actually active)
+        const extras = Array.isArray(defaults.extras) ? defaults.extras : [];
+        const VextraC = extras.reduce((s, e) => s + (Number(e.priceIst)||0) * (Number(e.dropPerRun)||0), 0);
+
+        els.extrasNote.textContent =
+          `Extras (Countess-only) loaded: ${extras.length} items. ` +
+          `VextraC ≈ ${fmt(VextraC, 4)} Ist/run(C). ` +
+          (VextraC <= 0 ? "⚠ Extras are currently OFF (dropPerRun=0)." : "Extras are ACTIVE.");
+
+        els.cfgStatus.textContent = "loaded";
+      } catch (e) {
+        els.cfgStatus.textContent = "failed";
+        console.error(e);
+      }
     }
-  }
 
-  function calculate() {
-    try {
-      const mode = getMode();
-
-      const baseParams = {
+    function baseParams() {
+      return {
         Dc: num(els.Dc),
         Ds: num(els.Ds),
         Dn: num(els.Dn),
@@ -207,68 +248,74 @@ Defaults load from <span class="mono">/config/model-parameters.json</span>.
         tN_min: num(els.tN_min),
         extras: (defaults && Array.isArray(defaults.extras)) ? defaults.extras : []
       };
-
-      let out;
-      if (mode === "hours") {
-        out = computeFromHours({ ...baseParams, hours: num(els.hoursInput) });
-      } else {
-        out = computeFromIst({ ...baseParams, Y: num(els.Y) });
-      }
-
-      els.X.textContent = fmt(out.X, 2);
-      els.runsLine.textContent = `Runs: Rc=${fmt(out.Rc, 0)} | Rs=${fmt(out.Rs, 0)} | Rn=${fmt(out.Rn, 0)}`;
-
-      // total hours implied by X (in fromHours this should match hours input closely)
-      els.hours.textContent = fmt(out.totalHours, 2);
-
-      // days line: only meaningful if user gives hours/day
-      const hpd = num(els.hpd);
-      if (Number.isFinite(hpd) && hpd > 0) {
-        els.daysLine.textContent = `≈ ${fmt(out.totalHours / hpd, 2)} days (at ${fmt(hpd, 1)} h/day)`;
-      } else {
-        els.daysLine.textContent = "—";
-      }
-
-      // show either "earned Ist" or "target Ist"
-      if (out.mode === "fromHours") {
-        els.rateLine.textContent =
-          `Earned Ist ≈ ${fmt(out.Y_total, 2)} | Ist/hour ≈ ${fmt(out.istPerHour, 3)} | VextraC ≈ ${fmt(out.VextraC, 4)} Ist/run(C)`;
-      } else {
-        els.rateLine.textContent =
-          `Ist/hour ≈ ${fmt(out.istPerHour, 3)} | Extras ≈ ${fmt(out.extrasIst, 2)} Ist | VextraC ≈ ${fmt(out.VextraC, 4)} Ist/run(C)`;
-      }
-    } catch (e) {
-      els.X.textContent = "—";
-      els.runsLine.textContent = "—";
-      els.hours.textContent = "—";
-      els.daysLine.textContent = "—";
-      els.rateLine.textContent = e.message || "Error";
     }
-  }
 
-  function syncModeUI() {
-    const mode = getMode();
-    els.hoursRow.style.display = (mode === "hours") ? "" : "none";
-    // You can also disable Y input in hours mode:
-    els.Y.disabled = (mode === "hours");
-    calculate();
-  }
+    function renderNeed(out) {
+      // Section 1: Y -> hours, runs
+      els.needHours.textContent = fmt(out.totalHours, 2);
 
-  await loadDefaults();
-  syncModeUI();
+      const hpd = num(els.hpd);
+      els.needDays.textContent = (Number.isFinite(hpd) && hpd > 0)
+        ? `≈ ${fmt(out.totalHours / hpd, 2)} days (at ${fmt(hpd, 1)} h/day)`
+        : "—";
 
-  els.calc.addEventListener("click", calculate);
+      els.needRuns.textContent =
+        `Runs: Rc=${fmt(out.Rc, 0)} | Rs=${fmt(out.Rs, 0)} | Rn=${fmt(out.Rn, 0)}`;
 
-  ["Y","hpd","hoursInput","Dc","Ds","Dn","tC_min","tS_min","tN_min"].forEach(id => {
-    const el = els[id];
-    if (el) el.addEventListener("input", calculate);
-  });
+      els.needDetails.textContent =
+        `X=${fmt(out.X, 2)} keysets | Ist/hour≈${fmt(out.istPerHour, 3)} | extras≈${fmt(out.extrasIst, 2)} Ist`;
 
-  document.querySelectorAll('input[name="mode"]').forEach(r => {
-    r.addEventListener("change", syncModeUI);
-  });
-</script>
+      // sanity check: output total should match target Y
+      const Y = num(els.Y);
+      const diff = Math.abs(out.Y_total - Y);
+      els.needWarn.textContent = diff > 0.02 ? `Sanity check: Y_total (${fmt(out.Y_total,2)}) differs from input Y (${fmt(Y,2)}). Check parameters.` : "";
+    }
 
+    function renderEarn(out) {
+      // Section 2: hours -> earned Ist, runs
+      els.earnIst.textContent = fmt(out.Y_total, 2);
+
+      const hpd = num(els.hpd);
+      const H = num(els.H);
+      els.earnDays.textContent = (Number.isFinite(hpd) && hpd > 0)
+        ? `≈ ${fmt(H / hpd, 2)} days (at ${fmt(hpd, 1)} h/day)`
+        : "—";
+
+      els.earnRuns.textContent =
+        `Runs: Rc=${fmt(out.Rc, 0)} | Rs=${fmt(out.Rs, 0)} | Rn=${fmt(out.Rn, 0)}`;
+
+      els.earnDetails.textContent =
+        `X=${fmt(out.X, 2)} keysets | Ist/hour≈${fmt(out.istPerHour, 3)} | extras≈${fmt(out.extrasIst, 2)} Ist`;
+
+      // sanity check: totalHours should match input H (numerically)
+      const diff = Math.abs(out.totalHours - H);
+      els.earnWarn.textContent = diff > 0.02 ? `Sanity check: model hours (${fmt(out.totalHours,2)}) differs from input H (${fmt(H,2)}). Check parameters.` : "";
+    }
+
+    function calcIst() {
+      const out = computeFromIst({ ...baseParams(), Y: num(els.Y) });
+      renderNeed(out);
+    }
+
+    function calcHours() {
+      const out = computeFromHours({ ...baseParams(), hours: num(els.H) });
+      renderEarn(out);
+    }
+
+    await loadDefaults();
+
+    // initial compute
+    calcIst();
+    calcHours();
+
+    // buttons
+    els.calcIst.addEventListener("click", calcIst);
+    els.calcHours.addEventListener("click", calcHours);
+
+    // auto-recalc on any input changes
+    ["Dc","Ds","Dn","tC_min","tS_min","tN_min","hpd","Y","H"].forEach(id => {
+      el(id).addEventListener("input", () => { calcIst(); calcHours(); });
+    });
+  </script>
 </body>
 </html>
-
