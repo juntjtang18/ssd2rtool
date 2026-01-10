@@ -1,136 +1,215 @@
-// model/keysPipeline.js
-// Keyset pipeline closed-form model.
-//
-// Definitions:
-// - Dc, Ds, Dn: expected keys per run (NOT runs per key)
-// - 1 keyset = 1 Ist (because 3 keys = 1 Ist in your assumption)
-// - extras are Countess-only, valued in Ist/run for Countess
-//
-// Modes:
-// A) Given target Y (Ist) -> solve X, runs, hours
-// B) Given hours -> solve X, runs, and earned Ist
+// /model/keysPipeline.js
 
-function toNum(x, fallback = NaN) {
-  const n = typeof x === "string" ? parseFloat(x) : x;
-  return Number.isFinite(n) ? n : fallback;
-}
+import { getRuneQuote } from "./priceTable.js";
 
-function assertPos(name, x) {
-  if (!Number.isFinite(x) || x <= 0) throw new Error(`${name} must be > 0`);
-}
+/**
+ * Rotation planner (Policy A, deterministic expected-time):
+ * C (TKey) -> S (HKey) -> N (DKey), repeating.
+ *
+ * - Keys are integers (you only "gain" a key when you finish the planned runs for 1 key)
+ * - Countess extras pieces accumulate; bankable value counts only full batches (floor(pcs/O)*N)
+ * - Bonus extras are reported but NOT used to decide stopping (Not Guaranteed)
+ */
+export function planRotationToTargetIst({
+  targetIst,
+  phase,
+  priceTable,
+  params,
+  buffer = 1.0,           // optional e.g. 1.10
+  maxCycles = 5000         // safety
+}) {
+  const Dc = Number(params.Dc); // TKey per run
+  const Ds = Number(params.Ds); // HKey per run
+  const Dn = Number(params.Dn); // DKey per run
 
-export function computeFromIst(params) {
-  const Y = toNum(params.Y);
-  const base = normalizeParams(params);
-  assertPos("Y", Y);
+  const tC = Number(params.tC_min); // min/run
+  const tS = Number(params.tS_min);
+  const tN = Number(params.tN_min);
 
-  const { Dc, Ds, Dn, tC_sec, tS_sec, tN_sec, VextraC } = base;
+  if (!(Dc > 0 && Ds > 0 && Dn > 0 && tC > 0 && tS > 0 && tN > 0)) {
+    throw new Error("Invalid key pipeline parameters (D* and t*_min must be > 0).");
+  }
 
-  // keysets needed
-  const X = Y / (1 + VextraC / Dc);
+  // Deterministic "runs to get 1 key"
+  const runsPerT = Math.ceil(1 / Dc);
+  const runsPerH = Math.ceil(1 / Ds);
+  const runsPerD = Math.ceil(1 / Dn);
 
-  return finalize({
-    mode: "fromIst",
-    Y_target: Y,
-    hours_input: null,
-    X,
-    Dc, Ds, Dn,
-    tC_sec, tS_sec, tN_sec,
-    VextraC
-  });
-}
-
-export function computeFromHours(params) {
-  const hours = toNum(params.hours);
-  const base = normalizeParams(params);
-  assertPos("hours", hours);
-
-  const { Dc, Ds, Dn, tC_sec, tS_sec, tN_sec, VextraC } = base;
-
-  const secPerKeyset = (tC_sec / Dc) + (tS_sec / Ds) + (tN_sec / Dn);
-  const totalSec = hours * 3600;
-
-  // keysets producible within given time
-  const X = totalSec / secPerKeyset;
-
-  return finalize({
-    mode: "fromHours",
-    Y_target: null,
-    hours_input: hours,
-    X,
-    Dc, Ds, Dn,
-    tC_sec, tS_sec, tN_sec,
-    VextraC
-  });
-}
-
-// -------- helpers --------
-
-function normalizeParams(params) {
-  const Dc = toNum(params.Dc);
-  const Ds = toNum(params.Ds);
-  const Dn = toNum(params.Dn);
-
-  const tC_min = toNum(params.tC_min);
-  const tS_min = toNum(params.tS_min);
-  const tN_min = toNum(params.tN_min);
-
-  assertPos("Dc", Dc);
-  assertPos("Ds", Ds);
-  assertPos("Dn", Dn);
-  assertPos("tC_min", tC_min);
-  assertPos("tS_min", tS_min);
-  assertPos("tN_min", tN_min);
-
+  // config extras
   const extras = Array.isArray(params.extras) ? params.extras : [];
-  const VextraC = extras.reduce((sum, e) => {
-    const priceIst = toNum(e.priceIst, 0);
-    const dropPerRun = toNum(e.dropPerRun, 0);
-    if (!Number.isFinite(priceIst) || !Number.isFinite(dropPerRun)) return sum;
-    return sum + priceIst * dropPerRun;
-  }, 0);
+  const regularExtras = extras.filter(x => !String(x.name || x.id || "").toUpperCase().startsWith("BONUS"));
+  const bonusExtras   = extras.filter(x =>  String(x.name || x.id || "").toUpperCase().startsWith("BONUS"));
+
+  // piece buckets (expected pieces, may be fractional internally)
+  const pcs = {};      // for regular extras
+  const pcsBonus = {}; // for bonus extras
+
+  for (const e of regularExtras) pcs[String(e.name || e.id).toUpperCase()] = 0;
+  for (const e of bonusExtras)   pcsBonus[String(e.name || e.id).toUpperCase().replace(/^BONUS\s*/i,"")] = 0;
+
+  let runsC = 0, runsS = 0, runsN = 0;
+  let minutesC = 0, minutesS = 0, minutesN = 0;
+
+  let T = 0, H = 0, D = 0; // integer keys
+
+  const target = Math.ceil(Number(targetIst) * buffer);
+  if (!(target > 0)) throw new Error("targetIst must be > 0");
+
+  function bankableExtrasIst(piecesMap) {
+    let ist = 0;
+    const rows = [];
+
+    for (const [name, p] of Object.entries(piecesMap)) {
+      const q = getRuneQuote(priceTable, phase, name); // {O,N}
+      if (!q || !(q.O > 0) || !(q.N > 0)) continue;
+
+      const piecesInt = Math.floor(p);       // predicted drops shown as integer
+      const orders = Math.floor(piecesInt / q.O);
+      const bank = orders * q.N;
+
+      if (orders > 0) {
+        ist += bank;
+      }
+      rows.push({ name, piecesInt, O: q.O, orders, ist: bank, N: q.N });
+    }
+
+    rows.sort((a,b)=> b.ist - a.ist);
+    return { ist, rows };
+  }
+
+  function possibleBonusIst(bonusPiecesMap) {
+    // purely for display, not used to stop
+    let ist = 0;
+    const rows = [];
+
+    for (const [name, p] of Object.entries(bonusPiecesMap)) {
+      const q = getRuneQuote(priceTable, phase, name);
+      if (!q || !(q.O > 0) || !(q.N > 0)) continue;
+
+      const piecesInt = Math.floor(p);
+      const orders = Math.floor(piecesInt / q.O);
+      const bank = orders * q.N;
+      ist += bank;
+      rows.push({ name, piecesInt, O: q.O, orders, ist: bank, N: q.N });
+    }
+
+    rows.sort((a,b)=> b.ist - a.ist);
+    return { ist, rows };
+  }
+
+  function bankableValue() {
+    const keysets = Math.min(T, H, D); // bankable only
+    const { ist: extraIst, rows: extraRows } = bankableExtrasIst(pcs);
+    const { ist: bonusIst, rows: bonusRows } = possibleBonusIst(pcsBonus);
+    return {
+      target,
+      keysets,
+      keysValueIst: keysets,        // 1 keyset = 1 Ist
+      extrasBankableIst: extraIst,
+      bonusPossibleIst: bonusIst,
+      totalBankableIst: keysets + extraIst, // STOP condition uses THIS
+      extraRows,
+      bonusRows
+    };
+  }
+
+  function addCountessStep() {
+    runsC += runsPerT;
+    minutesC += runsPerT * tC;
+    T += 1;
+
+    // regular extras
+    for (const e of regularExtras) {
+      const name = String(e.name || e.id).toUpperCase();
+      const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
+      if (dpr > 0) pcs[name] = (pcs[name] ?? 0) + runsPerT * dpr;
+    }
+    // bonus extras (display only)
+    for (const e of bonusExtras) {
+      const raw = String(e.name || e.id).toUpperCase();
+      const name = raw.replace(/^BONUS\s*/i,"");
+      const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
+      if (dpr > 0) pcsBonus[name] = (pcsBonus[name] ?? 0) + runsPerT * dpr;
+    }
+  }
+
+  function addSummonerStep() {
+    runsS += runsPerH;
+    minutesS += runsPerH * tS;
+    H += 1;
+  }
+
+  function addNihlStep() {
+    runsN += runsPerD;
+    minutesN += runsPerD * tN;
+    D += 1;
+  }
+
+  // simulate cycles: C -> S -> N
+  let cycles = 0;
+  let lastSnap = null;
+
+  while (cycles < maxCycles) {
+    addCountessStep();
+    lastSnap = bankableValue();
+    if (lastSnap.totalBankableIst >= target) break;
+
+    addSummonerStep();
+    lastSnap = bankableValue();
+    if (lastSnap.totalBankableIst >= target) break;
+
+    addNihlStep();
+    lastSnap = bankableValue();
+    if (lastSnap.totalBankableIst >= target) break;
+
+    cycles++;
+  }
+
+  const snap = lastSnap ?? bankableValue();
+
+  const hoursC = minutesC / 60;
+  const hoursS = minutesS / 60;
+  const hoursN = minutesN / 60;
+  const totalHours = hoursC + hoursS + hoursN;
 
   return {
-    Dc, Ds, Dn,
-    tC_sec: tC_min * 60,
-    tS_sec: tS_min * 60,
-    tN_sec: tN_min * 60,
-    VextraC
-  };
-}
+    targetIst: target,
+    phase,
 
-function finalize({ mode, Y_target, hours_input, X, Dc, Ds, Dn, tC_sec, tS_sec, tN_sec, VextraC }) {
-  // runs required (balanced production)
-  const Rc = X / Dc;
-  const Rs = X / Ds;
-  const Rn = X / Dn;
+    // Plan outputs
+    hours: { countess: hoursC, summoner: hoursS, nihl: hoursN, total: totalHours },
+    runs:  { countess: runsC, summoner: runsS, nihl: runsN },
 
-  // total time implied by X
-  const secPerKeyset = (tC_sec / Dc) + (tS_sec / Ds) + (tN_sec / Dn);
-  const totalHours = (X * secPerKeyset) / 3600;
+    // Keys
+    keys: { T, H, D, keysets: snap.keysets },
 
-  // value per keyset and total value
-  const istPerKeyset = 1 + (VextraC / Dc); // because per keyset we do X/Dc Countess runs
-  const Y_total = X * istPerKeyset;
+    // Drops (rounded ints for display)
+    predictedDrops: {
+      keysets: snap.keysets,
+      extras: snap.extraRows.map(r => ({ name: r.name, pcs: r.piecesInt })),
+      bonus: snap.bonusRows.map(r => ({ name: r.name, pcs: r.piecesInt }))
+    },
 
-  // productivity
-  const istPerHour = Y_total / totalHours;
+    // Bankable accounting
+    bankable: {
+      keysIst: snap.keysValueIst,
+      extrasIst: snap.extrasBankableIst,
+      totalIst: snap.totalBankableIst,
+      possibleBonusIst: snap.bonusPossibleIst
+    },
 
-  // extras breakdown
-  const extrasIst = Rc * VextraC;
-
-  return {
-    mode,
-    X,
-    Rc, Rs, Rn,
-    secPerKeyset,
-    totalHours,
-    istPerKeyset,
-    istPerHour,
-    VextraC,        // Ist/run from Countess extras
-    extrasIst,      // total extras Ist
-    Y_target,       // only in fromIst
-    hours_input,    // only in fromHours
-    Y_total         // earned (fromHours) or should match input (fromIst)
+    // For planner UI
+    tradeList: snap.extraRows.filter(r => r.orders > 0).map(r => ({
+      name: r.name,
+      orders: r.orders,
+      O: r.O,
+      ist: r.ist
+    })),
+    possibleBonusTrades: snap.bonusRows.filter(r => r.orders > 0).map(r => ({
+      name: r.name,
+      orders: r.orders,
+      O: r.O,
+      ist: r.ist
+    }))
   };
 }
