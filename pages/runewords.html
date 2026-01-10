@@ -9,18 +9,20 @@
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
     .wrap { max-width: 1040px; margin: 0 auto; padding: 22px 16px 40px; }
     h1 { margin: 6px 0 8px; font-size: 22px; }
-    .sub { color:var(--muted); margin: 0 0 16px; line-height: 1.55; white-space: pre-line; }
+    .sub { color:var(--muted); margin: 0 0 16px; line-height: 1.55; }
 
     .grid { display:grid; grid-template-columns: 1fr; gap: 14px; }
     @media (min-width: 980px){ .grid { grid-template-columns: 1fr 1fr; } }
 
     .card { background:var(--card); border:1px solid var(--line); border-radius: 14px; padding: 14px; }
     .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); font-weight: 900; letter-spacing: .2px; }
+
     .row { display:flex; gap:10px; align-items:center; margin: 10px 0; }
     label { flex: 1; color:var(--muted); font-size: 13px; }
-    select, input { width: 260px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
+    select, input { width: 280px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
     .btn { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: var(--accent); color:#05202a; font-weight: 900; cursor:pointer; margin-top: 8px; }
-    .tiny { color:var(--muted); font-size: 12px; line-height: 1.55; white-space: pre-line; }
+
+    .tiny { color:var(--muted); font-size: 12px; line-height: 1.55; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -28,36 +30,31 @@
     /* Planner emphasis */
     .bigNumber { font-size: 44px; font-weight: 950; margin: 6px 0 2px; line-height: 1.0; }
     .bigUnit { font-size: 13px; color: var(--muted); font-weight: 900; margin-left: 6px; }
-    .planBox { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background:#0f1318; }
+
+    .box { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background:#0f1318; }
+    .divider { height:1px; background: var(--line); margin: 10px 0; }
+
     .planGrid { display:grid; grid-template-columns: 1fr 110px 110px; gap: 8px 10px; align-items:center; }
     .planHdr { color: var(--muted); font-weight: 900; font-size: 12px; }
     .planBoss { color: var(--accent); font-weight: 950; font-size: 14px; }
-    .planCell { font-size: 14px; }
     .right { text-align:right; }
     .stopLine { margin-top: 10px; font-size: 14px; font-weight: 950; }
 
     /* Trade list */
-    .tradeGrid { display:grid; grid-template-columns: 1fr 160px; gap: 6px 12px; margin-top: 8px; }
-    .tradeGrid div { padding: 2px 0; }
+    .tradeGrid { display:grid; grid-template-columns: 1fr 160px; gap: 6px 12px; margin-top: 6px; }
     .tradeKey { color: var(--accent); font-weight: 950; }
 
-    /* Drops */
-    .dropsBox { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background:#0f1318; }
-    .dropsTitle { color: var(--muted); font-weight: 950; font-size: 12px; margin-bottom: 8px; }
-    .dropsTable { width:100%; border-collapse: collapse; }
-    .dropsTable td { padding: 6px 0; border-bottom: 1px solid #1c2735; }
-    .dropsName { color: var(--accent); font-weight: 900; }
-    .muted { color: var(--muted); }
-
     table { width:100%; border-collapse: collapse; }
-    td { padding: 6px 0; border-bottom: 1px solid #1c2735; }
+    td { padding: 8px 0; border-bottom: 1px solid #1c2735; }
+    .k { color: var(--accent); font-weight: 900; }
+    .muted { color: var(--muted); }
   </style>
 </head>
 
 <body>
   <div class="wrap">
     <h1>SSD2R Tool — Runewords Planner</h1>
-    <p class="sub">Pick a runeword + season phase → get a farming plan.</p>
+    <div class="sub">Pick a runeword + season phase → get a farming plan.</div>
 
     <!-- Top row -->
     <div class="grid">
@@ -80,63 +77,55 @@
         </div>
 
         <div class="row">
-          <label>Tag</label>
-          <select id="tag">
-            <option value="all">All</option>
-          </select>
-        </div>
-
-        <div class="row">
           <label>Runeword</label>
           <select id="rw"></select>
         </div>
 
         <button class="btn" id="calc">Calculate</button>
 
-        <p class="tiny">
-          <a href="../index.html">← Back to home</a> &nbsp;|&nbsp;
-          <a href="./model.html">Key Pipeline Model</a>
-        </p>
+        <div class="tiny" style="margin-top:10px;">
+          <a href="../index.html">← Back</a> &nbsp;|&nbsp;
+          <a href="./model.html">Key Pipeline</a>
+        </div>
       </div>
 
-      <!-- Planner Output -->
+      <!-- Planner -->
       <div class="card">
-        <h2>Farming Plan</h2>
+        <h2>Planner</h2>
 
         <div class="tiny">Total time</div>
         <div class="bigNumber"><span id="totalHours">—</span><span class="bigUnit">Hours</span></div>
 
-        <div class="planBox" style="margin-top:10px;">
+        <div class="box" style="margin-top:10px;">
           <div class="planGrid mono" id="planGrid"></div>
-          <div class="stopLine mono" id="targetKeys">—</div>
+          <div class="stopLine mono" id="targetLine">—</div>
         </div>
 
-        <div class="planBox" style="margin-top:12px;">
-          <div class="tiny" style="font-weight:950; color:var(--muted); margin-bottom:6px;">Trade list (extras)</div>
+        <div class="box" style="margin-top:12px;">
+          <div class="tiny muted" style="font-weight:900;">Trade list (extras)</div>
           <div class="tradeGrid mono" id="tradeList">—</div>
         </div>
       </div>
     </div>
 
-    <!-- Bottom row (SWAPPED: Rune breakdown on left, Drops on right) -->
+    <!-- Bottom row -->
     <div class="grid" style="margin-top:14px;">
-      <!-- Rune breakdown -->
-      <div class="card">
-        <h2>Rune breakdown</h2>
-        <div class="tiny mono" id="baseLine">—</div>
-        <div class="bigNumber" style="font-size:34px; margin-top:10px;">
-          <span id="totalCost">—</span><span class="bigUnit">Ist (Total Cost)</span>
-        </div>
-        <table id="tbl" style="margin-top:10px;"></table>
-      </div>
-
       <!-- Predicted drops -->
       <div class="card">
-        <h2>Total Drops Predicted</h2>
-        <div class="dropsBox">
-          <div class="dropsTitle mono">Rounded integers (EV)</div>
-          <table class="dropsTable mono" id="dropsTable"></table>
+        <h2>Predicted drops</h2>
+        <div class="box">
+          <table class="mono" id="dropsTable"></table>
         </div>
+      </div>
+
+      <!-- Rune cost -->
+      <div class="card">
+        <h2>Rune cost</h2>
+        <div class="bigNumber" style="font-size:34px;">
+          <span id="totalCost">—</span><span class="bigUnit">Ist</span>
+        </div>
+        <div class="divider"></div>
+        <table class="mono" id="breakdownTable"></table>
       </div>
     </div>
   </div>
@@ -144,33 +133,28 @@
   <script type="module">
     import { loadPriceTable } from "../model/priceTable.js";
     import { breakdownRuneword } from "../model/runewordsPlanner.js";
-    import { computeFromIst } from "../model/keysPipeline.js";
-    import { getRuneQuote } from "../model/priceTable.js";
+    import { planRotationToTargetIst } from "../model/keysPipeline.js";
 
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
-    const roundInt = (x) => (Number.isFinite(x) ? String(Math.round(x)) : "—");
+
+    const BUFFER = 1.10;
 
     const els = {
       phase: el("phase"),
       q: el("q"),
-      tag: el("tag"),
       rw: el("rw"),
       calc: el("calc"),
 
       totalHours: el("totalHours"),
       planGrid: el("planGrid"),
-      targetKeys: el("targetKeys"),
+      targetLine: el("targetLine"),
       tradeList: el("tradeList"),
 
       dropsTable: el("dropsTable"),
-
-      baseLine: el("baseLine"),
       totalCost: el("totalCost"),
-      tbl: el("tbl"),
+      breakdownTable: el("breakdownTable"),
     };
-
-    const BUFFER = 1.10;
 
     let priceTable = null;
     let runewordsData = null;
@@ -195,30 +179,11 @@
       els.phase.value = ["1","2","3"].includes(def) ? def : "2";
     }
 
-    function populateTagOptions() {
-      els.tag.innerHTML = "";
-      const optAll = document.createElement("option");
-      optAll.value = "all";
-      optAll.textContent = "All";
-      els.tag.appendChild(optAll);
-
-      for (const t of (runewordsData.tags || [])) {
-        const opt = document.createElement("option");
-        opt.value = t;
-        opt.textContent = t;
-        els.tag.appendChild(opt);
-      }
-    }
-
     function renderRunewordOptions() {
       const query = (els.q.value || "").trim().toLowerCase();
-      const tag = els.tag.value || "all";
-
       const list = (runewordsData.runewords || []).filter(r => {
-        const tags = Array.isArray(r.tags) ? r.tags : [];
-        if (tag !== "all" && !tags.includes(tag)) return false;
         if (!query) return true;
-        const hay = `${r.name} ${r.id} ${tags.join(" ")}`.toLowerCase();
+        const hay = `${r.name} ${r.id}`.toLowerCase();
         return hay.includes(query);
       });
 
@@ -232,8 +197,7 @@
         els.rw.appendChild(opt);
       }
 
-      const stillThere = Array.from(els.rw.options).some(o => o.value === prev);
-      if (stillThere) els.rw.value = prev;
+      if (Array.from(els.rw.options).some(o => o.value === prev)) els.rw.value = prev;
 
       if (!els.rw.options.length) {
         const opt = document.createElement("option");
@@ -248,119 +212,51 @@
       return (runewordsData.runewords || []).find(x => x.id === id);
     }
 
-    function renderBreakdown(rw, phase) {
+    function renderRuneCost(rw, phase) {
       const b = breakdownRuneword({ priceTable, phase, runes: rw.runes });
-
-      els.baseLine.textContent =
-        `Base: ${rw.base || "—"} | Tags: ${(rw.tags || []).join(", ") || "—"} | Notes: ${rw.notes || "—"}`;
 
       els.totalCost.textContent = fmt(b.totalIst, 2);
 
-      els.tbl.innerHTML = "";
-
+      els.breakdownTable.innerHTML = "";
       for (const row of b.rows) {
         const tr = document.createElement("tr");
-
         const td1 = document.createElement("td");
-        td1.className = "mono";
         td1.textContent = row.rune;
 
         const td2 = document.createElement("td");
-        td2.className = "mono";
         td2.style.textAlign = "right";
         td2.textContent = fmt(row.priceIst, 4);
 
         tr.appendChild(td1);
         tr.appendChild(td2);
-        els.tbl.appendChild(tr);
+        els.breakdownTable.appendChild(tr);
       }
 
       const tr = document.createElement("tr");
       const td1 = document.createElement("td");
-      td1.textContent = "Total Cost";
+      td1.textContent = "Total";
       const td2 = document.createElement("td");
-      td2.className = "mono";
       td2.style.textAlign = "right";
       td2.textContent = fmt(b.totalIst, 4);
       tr.appendChild(td1);
       tr.appendChild(td2);
-      els.tbl.appendChild(tr);
+      els.breakdownTable.appendChild(tr);
 
       return b;
     }
 
-    // ----- Unified (O,N) pricing rule -----
-    function computeBankableExtras({ RcTotal, phase }) {
-      const extras = Array.isArray(modelDefaults.extras) ? modelDefaults.extras : [];
-      const rows = [];
-      let bankableIst = 0;
+    function renderPlan(plan) {
+      const hC = plan.hours.countess;
+      const hS = plan.hours.summoner;
+      const hN = plan.hours.nihl;
 
-      for (const e of extras) {
-        const name = String(e.name ?? e.id ?? "").trim().toUpperCase();
-        const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
-        if (!name || !Number.isFinite(dpr) || dpr <= 0) continue;
+      const rC = plan.runs.countess;
+      const rS = plan.runs.summoner;
+      const rN = plan.runs.nihl;
 
-        const q = getRuneQuote(priceTable, phase, name);
-        if (!(q.N > 0) || !(q.O > 0)) continue;
+      els.totalHours.textContent = fmt(plan.hours.total, 2);
 
-        const piecesInt = Math.floor(RcTotal * dpr);
-        const orders = Math.floor(piecesInt / q.O);
-        const ist = orders * q.N;
-
-        bankableIst += ist;
-        rows.push({ name, dpr, O: q.O, N: q.N, piecesInt, orders, ist });
-      }
-
-      rows.sort((a,b)=> b.ist - a.ist);
-      return { rows, bankableIst };
-    }
-
-    function runsNeededForNextOrder({ RcTotal, row }) {
-      const expectedPieces = RcTotal * row.dpr;
-      const currentOrders = Math.floor(expectedPieces / row.O);
-      const nextThreshold = (currentOrders + 1) * row.O;
-
-      const needPieces = nextThreshold - expectedPieces;
-      if (!(needPieces > 0)) return Infinity;
-
-      return needPieces / row.dpr;
-    }
-
-    function topUpCountessRunsToBankableTarget({ baseRc, keysetsTarget, costIst, phase }) {
-      const targetBankable = Math.ceil(costIst);
-
-      let RcTotal = baseRc;
-      let iter = 0;
-
-      while (iter < 300) {
-        const { rows, bankableIst } = computeBankableExtras({ RcTotal, phase });
-        const bankableTotal = keysetsTarget + bankableIst;
-
-        if (bankableTotal >= targetBankable) {
-          return { RcTotal, rows, bankableIst, targetBankable };
-        }
-
-        let best = { addRuns: Infinity };
-        for (const r of rows) {
-          const addRunsEV = runsNeededForNextOrder({ RcTotal, row: r });
-          if (addRunsEV < best.addRuns) best = { addRuns: addRunsEV };
-        }
-
-        if (!Number.isFinite(best.addRuns) || best.addRuns === Infinity) {
-          return { RcTotal, rows, bankableIst, targetBankable };
-        }
-
-        RcTotal += Math.max(1, Math.ceil(best.addRuns));
-        iter++;
-      }
-
-      const { rows, bankableIst } = computeBankableExtras({ RcTotal, phase });
-      return { RcTotal, rows, bankableIst, targetBankable };
-    }
-
-    function renderPlanGrid({ hC, hS, hN, Rc, Rs, Rn }) {
       els.planGrid.innerHTML = "";
-
       const add = (txt, cls="") => {
         const d = document.createElement("div");
         d.className = cls;
@@ -373,37 +269,38 @@
       add("Runs", "planHdr right");
 
       add("Hell Countess", "planBoss");
-      add(fmt(hC, 2), "planCell right");
-      add(String(Rc), "planCell right");
+      add(fmt(hC, 2), "right");
+      add(String(rC), "right");
 
       add("Hell Summoner", "planBoss");
-      add(fmt(hS, 2), "planCell right");
-      add(String(Rs), "planCell right");
+      add(fmt(hS, 2), "right");
+      add(String(rS), "right");
 
       add("Hell Nihlathak", "planBoss");
-      add(fmt(hN, 2), "planCell right");
-      add(String(Rn), "planCell right");
+      add(fmt(hN, 2), "right");
+      add(String(rN), "right");
+
+      els.targetLine.textContent = `Stop at: ${plan.keys.keysets} keysets`;
     }
 
-    function renderTradeList({ rows }) {
-      if (!rows || !rows.length) {
+    function renderTradeList(plan) {
+      const rows = Array.isArray(plan.tradeList) ? plan.tradeList : [];
+      els.tradeList.innerHTML = "";
+
+      if (!rows.length) {
         els.tradeList.textContent = "—";
         return;
       }
 
-      els.tradeList.innerHTML = "";
-
-      let totalBankable = 0;
-
+      let total = 0;
       for (const r of rows) {
-        if (r.ist <= 0) continue;
-        totalBankable += r.ist;
+        total += Number(r.ist || 0);
 
         const left = document.createElement("div");
         left.innerHTML = `<span class="tradeKey">${r.name}</span>  (${r.O}×${r.orders})`;
 
         const right = document.createElement("div");
-        right.className = "right";
+        right.style.textAlign = "right";
         right.textContent = `${r.ist} Ist`;
 
         els.tradeList.appendChild(left);
@@ -413,67 +310,55 @@
       const l2 = document.createElement("div");
       l2.textContent = "Total extras (bankable)";
       const r2 = document.createElement("div");
-      r2.className = "right";
-      r2.textContent = `${totalBankable} Ist`;
+      r2.style.textAlign = "right";
+      r2.textContent = `${total} Ist`;
       els.tradeList.appendChild(l2);
       els.tradeList.appendChild(r2);
     }
 
-    function renderPredictedDrops({ Rc, Rs, Rn, keysetsTarget, extrasRows }) {
-      const Dc = Number(modelDefaults.Dc);
-      const Ds = Number(modelDefaults.Ds);
-      const Dn = Number(modelDefaults.Dn);
+    function renderPredictedDrops(plan) {
+      const rows = [];
 
-      const evT = (Number.isFinite(Dc) ? Rc * Dc : NaN);
-      const evH = (Number.isFinite(Ds) ? Rs * Ds : NaN);
-      const evD = (Number.isFinite(Dn) ? Rn * Dn : NaN);
+      rows.push({ k: "Keysets", v: `${plan.keys.keysets}` });
 
+      // regular extras
+      const extras = (plan.predictedDrops && Array.isArray(plan.predictedDrops.extras))
+        ? plan.predictedDrops.extras
+        : [];
+      for (const x of extras) {
+        if (!x || !x.name) continue;
+        rows.push({ k: x.name, v: `~${x.pcs}` });
+      }
+
+      // bonus extras
+      const bonus = (plan.predictedDrops && Array.isArray(plan.predictedDrops.bonus))
+        ? plan.predictedDrops.bonus
+        : [];
+
+      els.dropsTable.innerHTML = "";
       const tr = (k, v, cls="") => {
         const row = document.createElement("tr");
         const td1 = document.createElement("td");
         td1.className = cls;
         td1.textContent = k;
         const td2 = document.createElement("td");
-        td2.className = "right";
+        td2.style.textAlign = "right";
         td2.textContent = v;
         row.appendChild(td1);
         row.appendChild(td2);
         return row;
       };
 
-      els.dropsTable.innerHTML = "";
-
-      // Keys (rounded)
-      els.dropsTable.appendChild(tr("TKey (EV)", roundInt(evT), "dropsName"));
-      els.dropsTable.appendChild(tr("HKey (EV)", roundInt(evH), "dropsName"));
-      els.dropsTable.appendChild(tr("DKey (EV)", roundInt(evD), "dropsName"));
-      els.dropsTable.appendChild(tr("Stop target", `${keysetsTarget}/${keysetsTarget}/${keysetsTarget}`, "muted"));
-
-      // Extras drops (rounded pieces)
-      els.dropsTable.appendChild(tr("—", "—", "muted"));
-
-      // Separate “possible bonus”
-      const bonusRows = [];
-      const normalRows = [];
-
-      for (const r of (extrasRows || [])) {
-        const isBonus = String(r.name).toUpperCase().startsWith("BONUS");
-        if (isBonus) bonusRows.push(r); else normalRows.push(r);
+      // main rows
+      for (const r of rows) {
+        els.dropsTable.appendChild(tr(r.k, r.v, r.k === "Keysets" ? "k" : ""));
       }
 
-      for (const r of normalRows) {
-        const evPieces = Math.round(Rc * r.dpr);
-        if (evPieces <= 0) continue;
-        els.dropsTable.appendChild(tr(`${r.name} (EV pcs)`, String(evPieces)));
-      }
-
-      if (bonusRows.length) {
-        els.dropsTable.appendChild(tr("—", "—", "muted"));
+      if (bonus.length) {
+        els.dropsTable.appendChild(tr("", "", "muted"));
         els.dropsTable.appendChild(tr("Possible Bonus (Not Guaranteed)", "", "muted"));
-        for (const r of bonusRows) {
-          const evPieces = Math.round(Rc * r.dpr);
-          if (evPieces <= 0) continue;
-          els.dropsTable.appendChild(tr(`${r.name.replace(/^BONUS\s*/i,"")} (EV pcs)`, String(evPieces)));
+        for (const b of bonus) {
+          els.dropsTable.appendChild(tr(b.name, `~${b.pcs}`));
         }
       }
     }
@@ -485,58 +370,20 @@
       const rw = getSelectedRuneword();
       if (!rw) return;
 
-      const b = renderBreakdown(rw, phase);
+      const b = renderRuneCost(rw, phase);
       const costIst = b.totalIst;
 
-      const out = computeFromIst({
-        Y: costIst,
-        Dc: modelDefaults.Dc,
-        Ds: modelDefaults.Ds,
-        Dn: modelDefaults.Dn,
-        tC_min: modelDefaults.tC_min,
-        tS_min: modelDefaults.tS_min,
-        tN_min: modelDefaults.tN_min,
-        extras: modelDefaults.extras
+      const plan = planRotationToTargetIst({
+        targetIst: costIst,
+        phase,
+        priceTable,
+        params: modelDefaults,
+        buffer: BUFFER
       });
 
-      const keysetsTarget = Math.ceil(out.X * BUFFER);
-
-      const baseRc = Math.ceil(out.Rc * BUFFER);
-      const baseRs = Math.ceil(out.Rs * BUFFER);
-      const baseRn = Math.ceil(out.Rn * BUFFER);
-
-      const topup = topUpCountessRunsToBankableTarget({
-        baseRc,
-        keysetsTarget,
-        costIst,
-        phase
-      });
-
-      const RcPlan = topup.RcTotal;
-      const RsPlan = baseRs;
-      const RnPlan = baseRn;
-
-      const hC = (RcPlan * modelDefaults.tC_min) / 60;
-      const hS = (RsPlan * modelDefaults.tS_min) / 60;
-      const hN = (RnPlan * modelDefaults.tN_min) / 60;
-      const totalHoursPlan = hC + hS + hN;
-
-      els.totalHours.textContent = fmt(totalHoursPlan, 2);
-
-      renderPlanGrid({ hC, hS, hN, Rc: RcPlan, Rs: RsPlan, Rn: RnPlan });
-
-      els.targetKeys.textContent =
-        `Stop at: ${keysetsTarget} TKey + ${keysetsTarget} HKey + ${keysetsTarget} DKey`;
-
-      renderTradeList({ rows: topup.rows });
-
-      renderPredictedDrops({
-        Rc: RcPlan,
-        Rs: RsPlan,
-        Rn: RnPlan,
-        keysetsTarget,
-        extrasRows: topup.rows
-      });
+      renderPlan(plan);
+      renderTradeList(plan);
+      renderPredictedDrops(plan);
     }
 
     // init
@@ -544,16 +391,13 @@
     runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
 
-    populateTagOptions();
     setPhaseDefault();
     renderRunewordOptions();
 
     els.calc.addEventListener("click", calc);
     els.phase.addEventListener("change", calc);
     els.rw.addEventListener("change", calc);
-
     els.q.addEventListener("input", () => { renderRunewordOptions(); calc(); });
-    els.tag.addEventListener("change", () => { renderRunewordOptions(); calc(); });
 
     calc();
   </script>
