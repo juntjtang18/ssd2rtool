@@ -27,7 +27,6 @@
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
-    /* Planner emphasis */
     .bigNumber { font-size: 44px; font-weight: 950; margin: 6px 0 2px; line-height: 1.0; }
     .bigUnit { font-size: 13px; color: var(--muted); font-weight: 900; margin-left: 6px; }
 
@@ -40,7 +39,6 @@
     .right { text-align:right; }
     .stopLine { margin-top: 10px; font-size: 14px; font-weight: 950; }
 
-    /* Trade list */
     .tradeGrid { display:grid; grid-template-columns: 1fr 160px; gap: 6px 12px; margin-top: 6px; }
     .tradeKey { color: var(--accent); font-weight: 950; }
 
@@ -56,9 +54,7 @@
     <h1>SSD2R Tool — Runewords Planner</h1>
     <div class="sub">Pick a runeword + season phase → get a farming plan.</div>
 
-    <!-- Top row -->
     <div class="grid">
-      <!-- Inputs -->
       <div class="card">
         <h2>Inputs</h2>
 
@@ -89,11 +85,10 @@
         </div>
       </div>
 
-      <!-- Planner -->
       <div class="card">
         <h2>Planner</h2>
 
-        <div class="tiny">Total time</div>
+        <div class="tiny">Recommended time (+10%)</div>
         <div class="bigNumber"><span id="totalHours">—</span><span class="bigUnit">Hours</span></div>
 
         <div class="box" style="margin-top:10px;">
@@ -108,9 +103,7 @@
       </div>
     </div>
 
-    <!-- Bottom row -->
     <div class="grid" style="margin-top:14px;">
-      <!-- Predicted drops -->
       <div class="card">
         <h2>Predicted drops</h2>
         <div class="box">
@@ -118,7 +111,6 @@
         </div>
       </div>
 
-      <!-- Rune cost -->
       <div class="card">
         <h2>Rune cost</h2>
         <div class="bigNumber" style="font-size:34px;">
@@ -138,19 +130,18 @@
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
 
-    const BUFFER = 1.10;
+    // ✅ Display-only buffer (does NOT affect drops/runs/trades)
+    const DISPLAY_BUFFER = 1.10;
 
     const els = {
       phase: el("phase"),
       q: el("q"),
       rw: el("rw"),
       calc: el("calc"),
-
       totalHours: el("totalHours"),
       planGrid: el("planGrid"),
       targetLine: el("targetLine"),
       tradeList: el("tradeList"),
-
       dropsTable: el("dropsTable"),
       totalCost: el("totalCost"),
       breakdownTable: el("breakdownTable"),
@@ -246,15 +237,9 @@
     }
 
     function renderPlan(plan) {
-      const hC = plan.hours.countess;
-      const hS = plan.hours.summoner;
-      const hN = plan.hours.nihl;
-
-      const rC = plan.runs.countess;
-      const rS = plan.runs.summoner;
-      const rN = plan.runs.nihl;
-
-      els.totalHours.textContent = fmt(plan.hours.total, 2);
+      // buffered hours for display
+      const totalRecommended = plan.hours.total * DISPLAY_BUFFER;
+      els.totalHours.textContent = fmt(totalRecommended, 2);
 
       els.planGrid.innerHTML = "";
       const add = (txt, cls="") => {
@@ -269,18 +254,20 @@
       add("Runs", "planHdr right");
 
       add("Hell Countess", "planBoss");
-      add(fmt(hC, 2), "right");
-      add(String(rC), "right");
+      add(fmt(plan.hours.countess * DISPLAY_BUFFER, 2), "right");
+      add(String(plan.runs.countess), "right");
 
       add("Hell Summoner", "planBoss");
-      add(fmt(hS, 2), "right");
-      add(String(rS), "right");
+      add(fmt(plan.hours.summoner * DISPLAY_BUFFER, 2), "right");
+      add(String(plan.runs.summoner), "right");
 
       add("Hell Nihlathak", "planBoss");
-      add(fmt(hN, 2), "right");
-      add(String(rN), "right");
+      add(fmt(plan.hours.nihl * DISPLAY_BUFFER, 2), "right");
+      add(String(plan.runs.nihl), "right");
 
-      els.targetLine.textContent = `Stop at: ${plan.keys.keysets} keysets`;
+      // stop condition is based on the real (non-buffered) plan
+      els.targetLine.textContent =
+        `Stop at: ${plan.keys.keysets} keysets + extras trades (${plan.bankable.extrasIst} Ist)`;
     }
 
     function renderTradeList(plan) {
@@ -317,25 +304,11 @@
     }
 
     function renderPredictedDrops(plan) {
-      const rows = [];
-
-      rows.push({ k: "Keysets", v: `${plan.keys.keysets}` });
-
-      // regular extras
-      const extras = (plan.predictedDrops && Array.isArray(plan.predictedDrops.extras))
-        ? plan.predictedDrops.extras
-        : [];
-      for (const x of extras) {
-        if (!x || !x.name) continue;
-        rows.push({ k: x.name, v: `~${x.pcs}` });
-      }
-
-      // bonus extras
-      const bonus = (plan.predictedDrops && Array.isArray(plan.predictedDrops.bonus))
-        ? plan.predictedDrops.bonus
-        : [];
+      const extras = (plan.predictedDrops && Array.isArray(plan.predictedDrops.extras)) ? plan.predictedDrops.extras : [];
+      const bonus  = (plan.predictedDrops && Array.isArray(plan.predictedDrops.bonus))  ? plan.predictedDrops.bonus  : [];
 
       els.dropsTable.innerHTML = "";
+
       const tr = (k, v, cls="") => {
         const row = document.createElement("tr");
         const td1 = document.createElement("td");
@@ -349,13 +322,14 @@
         return row;
       };
 
-      // main rows
-      for (const r of rows) {
-        els.dropsTable.appendChild(tr(r.k, r.v, r.k === "Keysets" ? "k" : ""));
+      els.dropsTable.appendChild(tr("Keysets", String(plan.keys.keysets), "k"));
+
+      for (const x of extras) {
+        els.dropsTable.appendChild(tr(x.name, `~${x.pcs}`));
       }
 
       if (bonus.length) {
-        els.dropsTable.appendChild(tr("", "", "muted"));
+        els.dropsTable.appendChild(tr("", ""));
         els.dropsTable.appendChild(tr("Possible Bonus (Not Guaranteed)", "", "muted"));
         for (const b of bonus) {
           els.dropsTable.appendChild(tr(b.name, `~${b.pcs}`));
@@ -378,7 +352,7 @@
         phase,
         priceTable,
         params: modelDefaults,
-        buffer: BUFFER
+        buffer: 1.0 // ✅ model buffer is ALWAYS 1.0
       });
 
       renderPlan(plan);
@@ -386,7 +360,6 @@
       renderPredictedDrops(plan);
     }
 
-    // init
     priceTable = await loadPriceTable();
     runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
