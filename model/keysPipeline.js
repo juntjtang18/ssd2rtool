@@ -40,6 +40,21 @@ export function planRotationToTargetIst({
   const regularExtras = extras.filter(x => !String(x.name || x.id || "").toUpperCase().startsWith("BONUS"));
   const bonusExtras   = extras.filter(x =>  String(x.name || x.id || "").toUpperCase().startsWith("BONUS"));
 
+  // dropRate lookup maps (used for UI filtering like >=5%)
+  const dropRateRegular = {};
+  const dropRateBonus = {};
+  for (const e of regularExtras) {
+    const name = String(e.name || e.id || "").toUpperCase();
+    const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
+    if (name) dropRateRegular[name] = (Number.isFinite(dpr) ? dpr : 0);
+  }
+  for (const e of bonusExtras) {
+    const raw = String(e.name || e.id || "").toUpperCase();
+    const name = raw.replace(/^BONUS\s*/i, "");
+    const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
+    if (name) dropRateBonus[name] = (Number.isFinite(dpr) ? dpr : 0);
+  }
+
   // piece buckets (expected pieces, may be fractional internally)
   const pcs = {};      // for regular extras
   const pcsBonus = {}; // for bonus extras
@@ -61,9 +76,15 @@ export function planRotationToTargetIst({
 
     for (const [name, p] of Object.entries(piecesMap)) {
       const q = getRuneQuote(priceTable, phase, name); // {O,N}
-      if (!q || !(q.O > 0) || !(q.N > 0)) continue;
+      // Price table missing => not bankable, but we still keep it for predicted drops via rows.
+      // Here: if no quote, still push a row (ist=0, orders=0) so UI can display it if it wants.
+      const piecesInt = Math.floor(p);
 
-      const piecesInt = Math.floor(p);       // predicted drops shown as integer
+      if (!q || !(q.O > 0) || !(q.N > 0)) {
+        rows.push({ name, piecesInt, O: 0, orders: 0, ist: 0, N: 0 });
+        continue;
+      }
+
       const orders = Math.floor(piecesInt / q.O);
       const bank = orders * q.N;
 
@@ -84,9 +105,13 @@ export function planRotationToTargetIst({
 
     for (const [name, p] of Object.entries(bonusPiecesMap)) {
       const q = getRuneQuote(priceTable, phase, name);
-      if (!q || !(q.O > 0) || !(q.N > 0)) continue;
-
       const piecesInt = Math.floor(p);
+
+      if (!q || !(q.O > 0) || !(q.N > 0)) {
+        rows.push({ name, piecesInt, O: 0, orders: 0, ist: 0, N: 0 });
+        continue;
+      }
+
       const orders = Math.floor(piecesInt / q.O);
       const bank = orders * q.N;
       ist += bank;
@@ -183,11 +208,19 @@ export function planRotationToTargetIst({
     // Keys
     keys: { T, H, D, keysets: snap.keysets },
 
-    // Drops (rounded ints for display)
+    // Drops (rounded ints for display) + include dropRate for filtering
     predictedDrops: {
       keysets: snap.keysets,
-      extras: snap.extraRows.map(r => ({ name: r.name, pcs: r.piecesInt })),
-      bonus: snap.bonusRows.map(r => ({ name: r.name, pcs: r.piecesInt }))
+      extras: snap.extraRows.map(r => ({
+        name: r.name,
+        pcs: r.piecesInt,
+        dropRate: dropRateRegular[String(r.name || "").toUpperCase()] ?? 0
+      })),
+      bonus: snap.bonusRows.map(r => ({
+        name: r.name,
+        pcs: r.piecesInt,
+        dropRate: dropRateBonus[String(r.name || "").toUpperCase()] ?? 0
+      }))
     },
 
     // Bankable accounting
