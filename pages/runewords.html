@@ -27,7 +27,6 @@
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
-    /* Planner emphasis */
     .bigNumber { font-size: 44px; font-weight: 950; margin: 6px 0 2px; line-height: 1.0; }
     .bigUnit { font-size: 13px; color: var(--muted); font-weight: 900; margin-left: 6px; }
 
@@ -55,9 +54,7 @@
     <h1>SSD2R Tool — Runewords Planner</h1>
     <div class="sub">Pick a runeword + season phase → get a farming plan.</div>
 
-    <!-- Top row -->
     <div class="grid">
-      <!-- Inputs -->
       <div class="card">
         <h2>Inputs</h2>
 
@@ -88,7 +85,6 @@
         </div>
       </div>
 
-      <!-- Planner -->
       <div class="card">
         <h2>Planner</h2>
 
@@ -107,9 +103,7 @@
       </div>
     </div>
 
-    <!-- Bottom row -->
     <div class="grid" style="margin-top:14px;">
-      <!-- Predicted drops -->
       <div class="card">
         <h2>Predicted drops</h2>
         <div class="box">
@@ -117,7 +111,6 @@
         </div>
       </div>
 
-      <!-- Rune cost -->
       <div class="card">
         <h2>Rune cost</h2>
         <div class="bigNumber" style="font-size:34px;">
@@ -137,8 +130,7 @@
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
 
-    // ✅ Display-only buffer: ONLY applied to the big "Total time" number.
-    // Everything else (boss hours, runs, drops, trade list) stays base.
+    // Display-only buffer: ONLY applied to the big total hours number
     const DISPLAY_BUFFER = 1.10;
 
     const els = {
@@ -246,12 +238,11 @@
       return b;
     }
 
-    // ✅ Your final rule:
-    // - Only apply 1.1 to the big "Total time" shown.
-    // - Boss hours + runs are base plan.
     function renderPlan(plan) {
+      // Only apply buffer to big number
       els.totalHours.textContent = fmt(plan.hours.total * DISPLAY_BUFFER, 2);
 
+      // Everything else is base plan
       els.planGrid.innerHTML = "";
       const add = (txt, cls="") => {
         const d = document.createElement("div");
@@ -276,8 +267,8 @@
       add(fmt(plan.hours.nihl, 2), "right");
       add(String(plan.runs.nihl), "right");
 
-      els.targetLine.textContent =
-        `Stop at: ${plan.keys.keysets} keysets + extras trades (${plan.bankable.extrasIst} Ist)`;
+      // ✅ Only show keysets
+      els.targetLine.textContent = `Stop at: ${plan.keys.keysets} keysets`;
     }
 
     function renderTradeList(plan) {
@@ -289,10 +280,7 @@
         return;
       }
 
-      let total = 0;
       for (const r of rows) {
-        total += Number(r.ist || 0);
-
         const left = document.createElement("div");
         left.innerHTML = `<span class="tradeKey">${r.name}</span>  (${r.O}×${r.orders})`;
 
@@ -303,14 +291,6 @@
         els.tradeList.appendChild(left);
         els.tradeList.appendChild(right);
       }
-
-      const l2 = document.createElement("div");
-      l2.textContent = "Total extras (bankable)";
-      const r2 = document.createElement("div");
-      r2.style.textAlign = "right";
-      r2.textContent = `${total} Ist`;
-      els.tradeList.appendChild(l2);
-      els.tradeList.appendChild(r2);
     }
 
     function renderPredictedDrops(plan) {
@@ -351,6 +331,51 @@
       }
     }
 
+    function renderZeroState() {
+      // Clear planner
+      els.totalHours.textContent = fmt(0, 2);
+
+      els.planGrid.innerHTML = "";
+      const add = (txt, cls="") => {
+        const d = document.createElement("div");
+        d.className = cls;
+        d.textContent = txt;
+        els.planGrid.appendChild(d);
+      };
+
+      add("", "planHdr");
+      add("Hours", "planHdr right");
+      add("Runs", "planHdr right");
+
+      add("Hell Countess", "planBoss");
+      add(fmt(0, 2), "right");
+      add("0", "right");
+
+      add("Hell Summoner", "planBoss");
+      add(fmt(0, 2), "right");
+      add("0", "right");
+
+      add("Hell Nihlathak", "planBoss");
+      add(fmt(0, 2), "right");
+      add("0", "right");
+
+      els.targetLine.textContent = `Stop at: 0 keysets`;
+
+      // Clear trade list & drops
+      els.tradeList.textContent = "—";
+      els.dropsTable.innerHTML = "";
+      const row = document.createElement("tr");
+      const td1 = document.createElement("td");
+      td1.className = "k";
+      td1.textContent = "Keysets";
+      const td2 = document.createElement("td");
+      td2.style.textAlign = "right";
+      td2.textContent = "0";
+      row.appendChild(td1);
+      row.appendChild(td2);
+      els.dropsTable.appendChild(row);
+    }
+
     function calc() {
       const phase = els.phase.value;
       localStorage.setItem("seasonPhase", phase);
@@ -359,9 +384,15 @@
       if (!rw) return;
 
       const b = renderRuneCost(rw, phase);
-      const costIst = b.totalIst;
+      const costIst = Number(b.totalIst || 0);
 
-      // ✅ Model must NOT see buffer. Plan/drops are base.
+      // ✅ cost=0 => show 0 hours everywhere
+      if (!(costIst > 0)) {
+        renderZeroState();
+        return;
+      }
+
+      // Model must NOT see display buffer
       const plan = planRotationToTargetIst({
         targetIst: costIst,
         phase,
