@@ -1,11 +1,10 @@
 // /model/keysPipelineDeterministic.js
-// Deterministic planner:
+// Deterministic rotation planner with INTEGER RUNS.
 // - Rotate C -> S -> N
-// - Each step "buys" 1 key using expected runs = 1/p and expected time = (1/p)*t
-// - Keys are counted as INTEGERS
-// - Value counts every key as 1/3 Ist (banked), plus Countess extras EV during Countess time.
-
-// /model/keysPipelineDeterministic.js
+// - Each full key costs runsNeeded = ceil(1/p) (integer runs)
+// - Time cost = runsNeeded * t (min/run)
+// - Tail: spend remaining time on next boss only, using tailRuns = floor(remain/t) (integer runs)
+//         fractional key progress = tailRuns * p  (only one boss can have a fraction)
 
 function computeVextraC(extras) {
   return (extras || []).reduce((sum, e) => {
@@ -28,13 +27,13 @@ export function planFromHoursDeterministic({
 
   const VextraC = computeVextraC(extras);
 
-  // integer keys + at most ONE fractional tail key
+  // keys: two integer, one may include fractional tail
   const keys = { T: 0, H: 0, D: 0 };
 
-  // expected run counts (can be fractional)
+  // runs are INTEGERS now
   let runsC = 0, runsS = 0, runsN = 0;
 
-  // expected extras (Countess-only)
+  // extras EV (Countess-only)
   let extrasIst = 0;
 
   const order = ["C", "S", "N"];
@@ -46,40 +45,47 @@ export function planFromHoursDeterministic({
     return { p: Dn, t: tN_min };
   }
 
-  function timeForOneKey(boss) {
-    const { p, t } = bossParams(boss);
-    if (!(p > 0) || !(t > 0)) return Infinity;
-    return (1 / p) * t; // minutes
+  function runsForOneKey(boss) {
+    const { p } = bossParams(boss);
+    if (!(p > 0)) return Infinity;
+    return Math.ceil(1 / p); // integer runs
   }
 
-  // 1) Buy as many full integer keys as possible, rotating strictly
+  function timeForOneKey(boss) {
+    const { t } = bossParams(boss);
+    const r = runsForOneKey(boss);
+    if (!(t > 0) || !Number.isFinite(r)) return Infinity;
+    return r * t; // minutes
+  }
+
+  // 1) Full keys via integer runs
   while (true) {
     const boss = order[idx];
     const needMin = timeForOneKey(boss);
+
     if (remainMin < needMin) break;
 
     remainMin -= needMin;
 
-    const { p } = bossParams(boss);
-    const expRuns = 1 / p;
+    const { p, t } = bossParams(boss);
+    const r = Math.ceil(1 / p);
 
     if (boss === "C") {
       keys.T += 1;
-      runsC += expRuns;
-      extrasIst += expRuns * VextraC;
+      runsC += r;
+      extrasIst += r * VextraC;
     } else if (boss === "S") {
       keys.H += 1;
-      runsS += expRuns;
+      runsS += r;
     } else {
       keys.D += 1;
-      runsN += expRuns;
+      runsN += r;
     }
 
     idx = (idx + 1) % order.length;
   }
 
-  // 2) Tail: spend remaining time ONLY on the next boss in rotation
-  // and give that boss a fractional expected key progress (< 1 key).
+  // 2) Tail: remaining time on next boss only, integer runs
   let tail = { boss: order[idx], runs: 0, fracKey: 0 };
 
   if (remainMin > 0) {
@@ -87,8 +93,8 @@ export function planFromHoursDeterministic({
     const { p, t } = bossParams(boss);
 
     if (p > 0 && t > 0) {
-      const tailRuns = remainMin / t;
-      const fracKey = Math.min(0.999999, tailRuns * p); // keep it < 1 by design
+      const tailRuns = Math.floor(remainMin / t); // integer runs
+      const fracKey = Math.min(0.999999, tailRuns * p); // keep < 1 by design
 
       tail = { boss, runs: tailRuns, fracKey };
 
@@ -104,8 +110,7 @@ export function planFromHoursDeterministic({
         runsN += tailRuns;
       }
 
-      // all time used
-      remainMin = 0;
+      remainMin -= tailRuns * t;
     }
   }
 
@@ -119,9 +124,9 @@ export function planFromHoursDeterministic({
   return {
     usedMin,
     remainMin,
-    keys,                       // two are integers, one may have fraction
-    runs: { runsC, runsS, runsN },
-    tail,                       // tells you which boss got the fractional key
+    keys,
+    runs: { runsC, runsS, runsN }, // integers
+    tail,                          // tailRuns integer; fracKey may be fractional
     VextraC,
     bankedKeyIst,
     extrasIst,
@@ -129,4 +134,3 @@ export function planFromHoursDeterministic({
     istPerHour
   };
 }
-
