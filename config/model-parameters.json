@@ -1,24 +1,23 @@
 {
-  "version": 1,
   "defaults": {
-    "Dc": 0.0857142857,
+    "Dc": 0.0972972973,
     "Ds": 0.0952380952,
-    "Dn": 0.0952380952,
+    "Dn": 0.1071428571,
 
-    "tC_min": 2.5,
-    "tS_min": 2.0,
-    "tN_min": 2.0,
+    "tC_min": 2.4243243243,
+    "tS_min": 1.6285714286,
+    "tN_min": 1.625,
 
     "extras": [
-      { "name": "FGs", "priceIst": 0.011, "dropPerRun": 0.0809523810 },
-      { "name": "FAs", "priceIst": 0.033, "dropPerRun": 0.0190476190 },
-      { "name": "Hel", "priceIst": 0.083, "dropPerRun": 0.0857142857 },
-      { "name": "Ral", "priceIst": 0.063, "dropPerRun": 0.1904761905 },
-      { "name": "Tal", "priceIst": 0.021, "dropPerRun": 0.2000000000 },
+      { "name": "FGs", "priceIst": 0.011, "dropPerRun": 0.0810810811 },
+      { "name": "FAs", "priceIst": 0.033, "dropPerRun": 0.0216216216 },
+      { "name": "Hel", "priceIst": 0.083, "dropPerRun": 0.0918918919 },
+      { "name": "Ral", "priceIst": 0.063, "dropPerRun": 0.1891891892 },
+      { "name": "Tal", "priceIst": 0.021, "dropPerRun": 0.2054054054 },
 
-      { "name": "Bonus Ist", "priceIst": 1.0, "dropPerRun": 0.0095238095 },
-      { "name": "Bonus Um", "priceIst": 0.25, "dropPerRun": 0.0047619048 },
-      { "name": "Bonus Mal", "priceIst": 0.5, "dropPerRun": 0.0047619048 }
+      { "name": "Bonus Ist", "priceIst": 1.0, "dropPerRun": 0.0108108108 },
+      { "name": "Bonus UM", "priceIst": 0.25, "dropPerRun": 0.0054054054 },
+      { "name": "Bonus Mal", "priceIst": 0.5, "dropPerRun": 0.0054054054 }
     ]
   }
 }
