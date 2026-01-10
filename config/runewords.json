@@ -1,0 +1,18 @@
+{
+  "runewords": [
+    {
+      "id": "infinity",
+      "name": "Infinity",
+      "runes": ["BER", "MAL", "BER", "IST"],
+      "base": "4os polearm/spear",
+      "notes": "Typical merc runeword."
+    },
+    {
+      "id": "hoto",
+      "name": "Heart of the Oak (HOTO)",
+      "runes": ["KO", "VEX", "PUL", "THUL"],
+      "base": "4os flail",
+      "notes": "If rune price missing, it will show as N/A."
+    }
+  ]
+}
