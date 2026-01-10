@@ -218,7 +218,7 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
       });
 
       // Use the expected hours from computeFromIst (continuous estimate)
-      els.hours.textContent = fmt(out.hours, 2);
+      els.hours.textContent = fmt((out.istPerHour > 0) ? (Y / out.istPerHour) : NaN, 2);
 
       els.runs.textContent =
         `Runs (expected): Rc≈${fmt(out.Rc, 0)} | Rs≈${fmt(out.Rs, 0)} | Rn≈${fmt(out.Rn, 0)}`;
