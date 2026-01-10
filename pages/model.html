@@ -1,84 +1,71 @@
 <!doctype html>
+<!-- /pages/model.html -->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>D2R Keys Model (Theory EV)</title>
+  <title>D2R Model (Theory EV)</title>
   <style>
     :root{
-      --bg:#0b1220;
-      --panel:#0f1b2e;
-      --panel2:#0d1728;
-      --text:#e7eefc;
-      --muted:#9db0d1;
-      --accent:#65d2ff;
-      --good:#8bffb1;
-      --warn:#ffd38b;
-      --bad:#ff8b8b;
+      --bg:#0b1220; --panel:#0f1b2e; --text:#e7eefc; --muted:#9db0d1;
+      --accent:#65d2ff; --good:#8bffb1; --warn:#ffd38b; --bad:#ff8b8b;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
     }
-    body{ margin:0; background:linear-gradient(180deg,#070c16, var(--bg)); color:var(--text); font-family:var(--sans); }
+    body{ margin:0; background:linear-gradient(180deg,#070c16,var(--bg)); color:var(--text); font-family:var(--sans); }
     .wrap{ max-width:1100px; margin:24px auto; padding:0 16px; }
-    h1{ font-size:20px; font-weight:700; margin:0 0 14px; }
-    .row{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start; }
+    h1{ font-size:20px; margin:0 0 14px; }
+    .row{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
     @media (max-width: 900px){ .row{ grid-template-columns:1fr; } }
-    .card{ background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:16px; box-shadow: 0 12px 26px rgba(0,0,0,0.35); }
-    .card h2{ margin:0 0 10px; font-size:15px; color:var(--muted); font-weight:700; }
+    .card{ background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:16px; box-shadow:0 12px 26px rgba(0,0,0,0.35); }
+    .card h2{ margin:0 0 10px; font-size:15px; color:var(--muted); }
     .sub{ color:var(--muted); font-size:12px; line-height:1.4; margin-top:6px; }
     label{ display:block; font-size:12px; color:var(--muted); margin:12px 0 6px; }
     input, select{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.22); color:var(--text); outline:none; }
     button{ width:100%; margin-top:12px; padding:12px 14px; border-radius:12px; border:0; cursor:pointer; font-weight:800; background:var(--accent); color:#05101f; }
-    button:hover{ filter:brightness(1.05); }
-    .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .mono{ font-family:var(--mono); }
     .kv{ display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
     .kv:last-child{ border-bottom:0; }
     .k{ color:var(--muted); font-size:12px; }
     .v{ font-family:var(--mono); font-size:12px; white-space:nowrap; }
     .big{ font-size:38px; font-weight:900; letter-spacing:-0.02em; }
     .unit{ font-size:12px; color:var(--muted); margin-left:8px; font-weight:700; }
-    .mono{ font-family:var(--mono); }
+    .pillbar{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.18); font-size:12px; color:var(--muted); }
+    .pill strong{ color:var(--text); font-family:var(--mono); }
+    .divider{ height:1px; background:rgba(255,255,255,0.06); margin:14px 0; }
     .note{ font-size:12px; color:var(--warn); margin-top:10px; }
     .err{ font-size:12px; color:var(--bad); white-space:pre-wrap; }
     .ok{ color:var(--good); }
-    .pillbar{ display:flex; gap:10px; flex-wrap:wrap; }
-    .pill{ display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.18); font-size:12px; color:var(--muted); }
-    .pill strong{ color:var(--text); font-family:var(--mono); font-weight:800; }
-    .divider{ height:1px; background:rgba(255,255,255,0.06); margin:14px 0; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>D2R Keys Model (Theory EV) — decimal time, extras only from Countess</h1>
+    <h1>D2R Keys Model (Theory EV) — based on /config + /model + /pages structure</h1>
 
     <div class="card" style="margin-bottom:16px">
-      <div class="grid2">
+      <div class="row" style="grid-template-columns:1fr 1fr">
         <div>
           <label>Price phase</label>
           <select id="phaseSel"></select>
-          <div class="sub">Loaded from <span class="mono" id="ptPath"></span></div>
+          <div class="sub">Loaded from <span class="mono">/config/rune-price-table.json</span></div>
         </div>
         <div>
-          <label>Config source</label>
-          <div class="pill">
-            <span class="mono" id="mpPath"></span>
-          </div>
-          <div class="sub">Using: Dc/Ds/Dn, tC/tS/tN, and Countess extras list.</div>
+          <label>Model parameters</label>
+          <div class="sub mono">/config/model-parameters.json</div>
+          <div class="pillbar" id="quickStats"></div>
         </div>
       </div>
-      <div class="divider"></div>
-      <div class="pillbar" id="quickStats"></div>
-      <div class="sub">Key assumption: 1 keyset = 1 Ist. Bonus is shown separately (EV only).</div>
+      <div class="sub">Assumptions: 1 keyset = 1 Ist. Pure EV (no ceil, no floor-batch, no bankable).</div>
       <div class="err" id="loadErr" style="display:none"></div>
     </div>
 
     <div class="row">
       <div class="card">
-        <h2>1) Target Ist → required hours + (decimal) runs</h2>
+        <h2>1) Target Ist → required hours + EV runs</h2>
         <label>Target Ist (exclude bonus)</label>
         <input id="targetIst" type="number" min="0" step="0.1" value="45" />
         <button id="btnTarget">Calculate</button>
-        <div class="sub">Theory EV: no ceil, no floor-batch, no bankable constraints.</div>
         <div class="divider"></div>
         <div id="outTarget"></div>
       </div>
@@ -88,7 +75,6 @@
         <label>Hours</label>
         <input id="hours" type="number" min="0" step="0.1" value="10" />
         <button id="btnHours">Calculate</button>
-        <div class="sub">Allocates time across bosses in the balanced rotation (keysets throughput).</div>
         <div class="divider"></div>
         <div id="outHours"></div>
       </div>
@@ -96,50 +82,43 @@
   </div>
 
   <script type="module">
+    // This file lives at /pages/model.html
     import { loadModelConfigs, getPhaseOptions, computeTheoryFromHours, computeTheoryFromTargetIst, priceInIst } from "../model/modelCore.js";
 
     const el = (id) => document.getElementById(id);
-
-    const fmt = (x, d=2) => {
-      if (x === null || x === undefined || Number.isNaN(Number(x))) return "-";
-      return Number(x).toFixed(d);
-    };
-    const fmtIntish = (x) => fmt(x, 2);
-    const fmtBig = (x) => `<span class="big">${fmt(x,2)}</span><span class="unit">Ist/h</span>`;
-
-    function renderKV(obj){
-      return Object.entries(obj).map(([k,v]) => `
-        <div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>
-      `).join("");
-    }
+    const fmt = (x, d=2) => (x == null || Number.isNaN(Number(x))) ? "-" : Number(x).toFixed(d);
 
     let cfg = null;
     let phaseKey = null;
 
-    function currentPhaseData(){
+    function currentPhaseData() {
       const phases = cfg?.priceTable?.phases ?? {};
       return phases?.[phaseKey] ?? {};
     }
 
-    function getDefaults(){
+    function getDefaults() {
       const d = cfg?.modelParameters?.defaults ?? {};
-      const Dc = Number(d.Dc), Ds = Number(d.Ds), Dn = Number(d.Dn);
-      const tC_min = Number(d.tC_min), tS_min = Number(d.tS_min), tN_min = Number(d.tN_min);
-      const extras = d.extras ?? [];
-      return { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras };
+      return {
+        Dc: Number(d.Dc),
+        Ds: Number(d.Ds),
+        Dn: Number(d.Dn),
+        tC_min: Number(d.tC_min),
+        tS_min: Number(d.tS_min),
+        tN_min: Number(d.tN_min),
+        extras: d.extras ?? []
+      };
     }
 
-    function buildQuickStats(){
+    function buildQuickStats() {
       const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras } = getDefaults();
       const pd = currentPhaseData();
-      const vPerRun = (name) => priceInIst(name, pd);
-
-      const extraNames = [...new Set((extras ?? []).map(x => String(x?.name ?? "").replace(/^BONUS\s*/i,"").trim()).filter(Boolean))];
-      const picks = ["RAL","HEL","TAL","PG","PA","FG","FA","IST","UM","MAL"].filter(x => extraNames.includes(x) || x in pd);
-      const priceStr = picks.map(n => `${n}=${fmt(vPerRun(n),4)}`).join(" · ");
 
       const timePerKeyset = (tC_min/Dc) + (tS_min/Ds) + (tN_min/Dn);
       const keysetsPerHour = 60 / timePerKeyset;
+
+      const extraNames = [...new Set((extras ?? []).map(x => String(x?.name ?? "").replace(/^BONUS\s*/i,"").trim()).filter(Boolean))];
+      const picks = ["RAL","HEL","TAL","PG","PA","FG","FA","IST","UM","MAL"].filter(x => (x in pd) || extraNames.includes(x));
+      const priceStr = picks.map(n => `${n}=${fmt(priceInIst(n, pd),4)}`).join(" · ");
 
       el("quickStats").innerHTML = [
         `<span class="pill">Dc <strong>${fmt(Dc,4)}</strong></span>`,
@@ -153,49 +132,47 @@
       ].join("");
     }
 
-    function renderTarget(r){
-      const out = el("outTarget");
-      out.innerHTML = `
-        <div class="kv"><div class="k">Required hours (EV, exclude bonus)</div><div class="v">${fmt(r.required.hours,2)} h</div></div>
-        <div class="kv"><div class="k">Required keysets (EV)</div><div class="v">${fmt(r.required.keysets,2)} keysets</div></div>
+    function renderTarget(r) {
+      el("outTarget").innerHTML = `
+        <div class="kv"><div class="k">Required hours (EV, excl. bonus)</div><div class="v">${fmt(r.required.hours,2)} h</div></div>
+        <div class="kv"><div class="k">Required keysets (EV)</div><div class="v">${fmt(r.required.keysets,2)}</div></div>
+        <div class="kv"><div class="k">Runs (EV)</div><div class="v">Rc=${fmt(r.required.runs.Rc,2)} · Rs=${fmt(r.required.runs.Rs,2)} · Rn=${fmt(r.required.runs.Rn,2)}</div></div>
         <div class="divider"></div>
         <div class="mono">
-          Runs (EV): Rc=${fmt(r.required.runs.Rc,2)} · Rs=${fmt(r.required.runs.Rs,2)} · Rn=${fmt(r.required.runs.Rn,2)}<br/>
-          Value: keys=${fmt(r.values.keysIst,2)} Ist + extras=${fmt(r.values.extrasRegularIst,2)} Ist = <span class="ok">${fmt(r.values.totalIstExclBonus,2)} Ist</span><br/>
-          Bonus (EV): ${fmt(r.values.bonusIst,2)} Ist (not included)<br/>
-          Rate: <b>${fmt(r.rates.istPerHourExclBonus,3)} Ist/h</b> (bonus EV ${fmt(r.rates.bonusPerHour,3)} Ist/h)
+          keys=${fmt(r.values.keysIst,2)} Ist + extras=${fmt(r.values.extrasRegularIst,2)} Ist = <span class="ok">${fmt(r.values.totalIstExclBonus,2)} Ist</span><br/>
+          bonus (EV, not included) = ${fmt(r.values.bonusIst,2)} Ist<br/>
+          rate = <b>${fmt(r.rates.istPerHourExclBonus,3)} Ist/h</b> (bonus EV ${fmt(r.rates.bonusPerHour,3)} Ist/h)
         </div>
-        <div class="note">This panel is purely theoretical EV: no ceil, no floor-batch, no “bankable only” constraints.</div>
+        <div class="note">Pure EV: no ceil, no floor-batch, no “bankable only” constraints.</div>
       `;
     }
 
-    function renderHours(r){
-      const out = el("outHours");
-      out.innerHTML = `
-        <div>${fmtBig(r.rates.istPerHourExclBonus)}</div>
-        <div class="sub">Exclude bonus. Bonus EV: ${fmt(r.rates.bonusPerHour,3)} Ist/h · Total incl bonus: ${fmt(r.rates.istPerHourInclBonus,3)} Ist/h</div>
+    function renderHours(r) {
+      el("outHours").innerHTML = `
+        <div><span class="big">${fmt(r.rates.istPerHourExclBonus,2)}</span><span class="unit">Ist/h</span></div>
+        <div class="sub">Exclude bonus. Bonus EV: ${fmt(r.rates.bonusPerHour,3)} Ist/h · Total incl. bonus: ${fmt(r.rates.istPerHourInclBonus,3)} Ist/h</div>
         <div class="divider"></div>
         <div class="mono">
-          Expected keysets: ${fmt(r.keysets,2)} (=${fmt(r.values.keysIst,2)} Ist from keys)<br/>
-          Runs (EV): Rc=${fmt(r.runs.Rc,2)} · Rs=${fmt(r.runs.Rs,2)} · Rn=${fmt(r.runs.Rn,2)}<br/>
-          Countess time: ${fmt(r.minutes.countessMin,2)} min (drives extras + bonus)<br/>
-          Extras (EV): ${fmt(r.values.extrasRegularIst,2)} Ist · Bonus (EV): ${fmt(r.values.bonusIst,2)} Ist<br/>
-          Total (EV excl bonus): <span class="ok">${fmt(r.values.totalIstExclBonus,2)} Ist</span>
+          keysets=${fmt(r.keysets,2)} (keys value ${fmt(r.values.keysIst,2)} Ist)<br/>
+          runs (EV) Rc=${fmt(r.runs.Rc,2)} · Rs=${fmt(r.runs.Rs,2)} · Rn=${fmt(r.runs.Rn,2)}<br/>
+          Countess time=${fmt(r.minutes.countessMin,2)} min (drives extras + bonus)<br/>
+          extras (EV)=${fmt(r.values.extrasRegularIst,2)} Ist · bonus (EV)=${fmt(r.values.bonusIst,2)} Ist<br/>
+          total (EV excl bonus)=<span class="ok">${fmt(r.values.totalIstExclBonus,2)} Ist</span>
         </div>
       `;
     }
 
-    async function main(){
-      try{
+    async function main() {
+      try {
         cfg = await loadModelConfigs();
-        el("mpPath").textContent = cfg.modelParametersPath;
-        el("ptPath").textContent = cfg.priceTablePath;
-
         const { phases, defaultPhase } = getPhaseOptions(cfg.priceTable);
         phaseKey = defaultPhase;
 
         const sel = el("phaseSel");
-        sel.innerHTML = Object.keys(phases).sort((a,b)=>Number(a)-Number(b)).map(k => `<option value="${k}">Phase ${k}</option>`).join("");
+        sel.innerHTML = Object.keys(phases)
+          .sort((a,b)=>Number(a)-Number(b))
+          .map(k => `<option value="${k}">Phase ${k}</option>`)
+          .join("");
         sel.value = phaseKey;
         sel.addEventListener("change", () => { phaseKey = sel.value; buildQuickStats(); });
 
@@ -223,14 +200,13 @@
           renderHours(r);
         });
 
-        // Auto-run once for initial view
         el("btnTarget").click();
         el("btnHours").click();
 
-      } catch(e){
+      } catch (e) {
         const errEl = el("loadErr");
         errEl.style.display = "block";
-        errEl.textContent = `CONFIG LOAD ERROR\n\n${e?.message ?? e}\n\n${(e?.details ?? []).join("\n")}`;
+        errEl.textContent = `CONFIG LOAD ERROR\n\n${e?.message ?? e}`;
       }
     }
 
