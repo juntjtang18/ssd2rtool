@@ -26,6 +26,9 @@
     td { padding: 6px 0; border-bottom: 1px solid #1c2735; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
+    details { border: 1px solid var(--line); border-radius: 12px; padding: 10px 10px; background: #0f1318; }
+    summary { cursor: pointer; color: var(--text); font-weight: 700; list-style: none; }
+    summary::-webkit-details-marker { display:none; }
   </style>
 </head>
 
@@ -33,8 +36,7 @@
   <div class="wrap">
     <h1>SSD2R Tool — Runewords Planner</h1>
     <p class="sub">
-Pick a runeword + season phase → compute total Ist cost → estimate farming hours via Keys Pipeline model.
-Rule: any rune not listed in the price table is treated as 0 Ist (common/free).
+Pick a runeword + season phase → get a farming plan.
     </p>
 
     <div class="grid">
@@ -76,25 +78,31 @@ Rule: any rune not listed in the price table is treated as 0 Ist (common/free).
       </div>
 
       <div class="card">
-        <h2>Outputs</h2>
+        <h2>Farming Plan</h2>
 
-        <div class="tiny">Runeword cost (Ist)</div>
+        <div class="tiny">Runeword cost</div>
         <div class="outBig"><span id="costIst">—</span> <span class="tiny">Ist</span></div>
 
-        <div class="tiny">Estimated hours (pipeline)</div>
-        <div class="outBig"><span id="hours">—</span> <span class="tiny">hours</span></div>
+        <div class="tiny">Total time</div>
+        <div class="outBig"><span id="totalHours">—</span> <span class="tiny">hours</span></div>
 
         <hr class="hr"/>
 
-        <div class="tiny mono" id="runs">Runs: —</div>
-        <div class="tiny mono" id="rate">—</div>
-        <div class="tiny mono" id="notes">—</div>
+        <div class="tiny mono" id="planLines">—</div>
+        <div class="tiny mono" id="targetKeys">—</div>
       </div>
 
       <div class="card" style="grid-column: 1 / -1;">
         <h2>Rune breakdown</h2>
         <div class="tiny mono" id="baseLine">—</div>
         <table id="tbl"></table>
+      </div>
+
+      <div class="card" style="grid-column: 1 / -1;">
+        <details>
+          <summary>Details</summary>
+          <div class="tiny mono" id="detailsLine" style="margin-top:10px;">—</div>
+        </details>
       </div>
     </div>
   </div>
@@ -115,14 +123,17 @@ Rule: any rune not listed in the price table is treated as 0 Ist (common/free).
       calc: el("calc"),
 
       costIst: el("costIst"),
-      hours: el("hours"),
-      runs: el("runs"),
-      rate: el("rate"),
-      notes: el("notes"),
+      totalHours: el("totalHours"),
+      planLines: el("planLines"),
+      targetKeys: el("targetKeys"),
 
       baseLine: el("baseLine"),
       tbl: el("tbl"),
+      detailsLine: el("detailsLine"),
     };
+
+    // Fixed planner buffer (no UI option)
+    const BUFFER = 1.10;
 
     let priceTable = null;
     let runewordsData = null;
@@ -186,11 +197,9 @@ Rule: any rune not listed in the price table is treated as 0 Ist (common/free).
         els.rw.appendChild(opt);
       }
 
-      // keep previous selection if possible
       const stillThere = Array.from(els.rw.options).some(o => o.value === prev);
       if (stillThere) els.rw.value = prev;
 
-      // if no options, clear selection
       if (!els.rw.options.length) {
         const opt = document.createElement("option");
         opt.value = "";
@@ -221,14 +230,13 @@ Rule: any rune not listed in the price table is treated as 0 Ist (common/free).
         const td2 = document.createElement("td");
         td2.className = "mono";
         td2.style.textAlign = "right";
-        td2.textContent = fmt(row.priceIst, 4); // always number; missing => 0
+        td2.textContent = fmt(row.priceIst, 4);
 
         tr.appendChild(td1);
         tr.appendChild(td2);
         els.tbl.appendChild(tr);
       }
 
-      // total row
       const tr = document.createElement("tr");
       const td1 = document.createElement("td");
       td1.textContent = "Total";
@@ -266,17 +274,32 @@ Rule: any rune not listed in the price table is treated as 0 Ist (common/free).
         extras: modelDefaults.extras
       });
 
-      // hours = cost / rate
-      els.hours.textContent = fmt((out.istPerHour > 0) ? (Y / out.istPerHour) : NaN, 2);
+      // Planner uses buffered INTEGER runs (ceil)
+      const RcPlan = Math.ceil(out.Rc * BUFFER);
+      const RsPlan = Math.ceil(out.Rs * BUFFER);
+      const RnPlan = Math.ceil(out.Rn * BUFFER);
 
-      els.runs.textContent =
-        `Runs (expected): Rc≈${fmt(out.Rc, 0)} | Rs≈${fmt(out.Rs, 0)} | Rn≈${fmt(out.Rn, 0)}`;
+      const hC = (RcPlan * modelDefaults.tC_min) / 60;
+      const hS = (RsPlan * modelDefaults.tS_min) / 60;
+      const hN = (RnPlan * modelDefaults.tN_min) / 60;
+      const totalHoursPlan = hC + hS + hN;
 
-      els.rate.textContent =
-        `Pipeline rate ≈ ${fmt(out.istPerHour, 3)} Ist/h (includes Countess extras)`;
+      els.totalHours.textContent = fmt(totalHoursPlan, 2);
 
-      els.notes.textContent =
-        `Phase ${phase} prices. Missing rune prices are treated as 0 Ist (common/free).`;
+      els.planLines.textContent =
+        `Hell Countess:  ${fmt(hC, 2)} h  (${RcPlan} runs)\n` +
+        `Hell Summoner:  ${fmt(hS, 2)} h  (${RsPlan} runs)\n` +
+        `Hell Nihlathak: ${fmt(hN, 2)} h  (${RnPlan} runs)`;
+
+      // Keyset target (buffered, integer)
+      const keysetsTarget = Math.ceil(out.X * BUFFER);
+      els.targetKeys.textContent =
+        `Stop at: ${keysetsTarget} TKey + ${keysetsTarget} HKey + ${keysetsTarget} DKey`;
+
+      // Move non-plan information to Details
+      const hoursEV = (out.istPerHour > 0) ? (Y / out.istPerHour) : NaN;
+      els.detailsLine.textContent =
+        `Phase=${phase} | rate≈${fmt(out.istPerHour, 3)} Ist/h | EV hours≈${fmt(hoursEV, 2)} | buffer=+10% | missing rune prices=0`;
     }
 
     // init
