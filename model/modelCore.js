@@ -19,9 +19,17 @@ async function fetchJson(path) {
 }
 
 export async function loadModelConfigs() {
+  // IMPORTANT for GitHub Pages under a repo subpath:
+  // Use URLs relative to this module file (/model/modelCore.js),
+  // so it works at:
+  //   https://<user>.github.io/<repo>/...
+  // not only at domain root.
+  const mpUrl = new URL("../config/model-parameters.json", import.meta.url);
+  const ptUrl = new URL("../config/rune-price-table.json", import.meta.url);
+
   const [modelParameters, priceTable] = await Promise.all([
-    fetchJson("/config/model-parameters.json"),
-    fetchJson("/config/rune-price-table.json"),
+    fetchJson(mpUrl.href),
+    fetchJson(ptUrl.href),
   ]);
   return { modelParameters, priceTable };
 }
