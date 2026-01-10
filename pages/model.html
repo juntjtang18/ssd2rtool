@@ -28,7 +28,7 @@
     .pill { display:inline-block; padding: 2px 8px; border:1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; margin-left: 8px; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .sectionTitle { margin: 10px 0 6px; font-weight: 900; color: var(--text); }
+    .sectionTitle { margin: 14px 0 6px; font-weight: 900; color: var(--text); }
     .twoCol { display:grid; grid-template-columns: 1fr; gap: 14px; }
     @media (min-width: 980px){ .twoCol { grid-template-columns: 1fr 1fr; } }
     .warn { color: #ffd27d; }
@@ -39,9 +39,13 @@
   <div class="wrap">
     <h1>SSD2R Tool — Keyset Pipeline Model</h1>
     <p class="sub">
-Two calculators using the same model + centralized parameters:
+Two calculators using the same centralized parameters:
 (1) Target Ist → required hours + runs (C/S/N)
 (2) Target hours → earned Ist + runs (C/S/N)
+
+Keysets are displayed as INTEGERS:
+- Target Ist: we CEIL keysets so you can actually reach the target.
+- Target hours: we FLOOR keysets (conservative, no fractional keyset).
     </p>
 
     <!-- Shared Parameters -->
@@ -56,37 +60,32 @@ Two calculators using the same model + centralized parameters:
           <h2>Key drop rates (keys/run)</h2>
           <div class="row">
             <label>Dc (Countess)</label>
-            <input id="Dc" type="number" step="0.0001">
+            <input id="Dc" type="number" step="0.0001" min="0.0001">
           </div>
           <div class="row">
             <label>Ds (Summoner)</label>
-            <input id="Ds" type="number" step="0.0001">
+            <input id="Ds" type="number" step="0.0001" min="0.0001">
           </div>
           <div class="row">
             <label>Dn (Nihlathak)</label>
-            <input id="Dn" type="number" step="0.0001">
+            <input id="Dn" type="number" step="0.0001" min="0.0001">
           </div>
-          <p class="tiny">Runs are computed as: Rc=X/Dc, Rs=X/Ds, Rn=X/Dn</p>
+          <p class="tiny">Runs are computed as: Rc=K/Dc, Rs=K/Ds, Rn=K/Dn (K = integer keysets).</p>
         </div>
 
         <div class="card" style="margin:0;">
           <h2>Run times (min/run)</h2>
           <div class="row">
             <label>tC (Countess)</label>
-            <input id="tC_min" type="number" step="0.1">
+            <input id="tC_min" type="number" step="0.1" min="0.1">
           </div>
           <div class="row">
             <label>tS (Summoner)</label>
-            <input id="tS_min" type="number" step="0.1">
+            <input id="tS_min" type="number" step="0.1" min="0.1">
           </div>
           <div class="row">
             <label>tN (Nihlathak)</label>
-            <input id="tN_min" type="number" step="0.1">
-          </div>
-
-          <div class="row">
-            <label>Hours/day (optional, for “days” display)</label>
-            <input id="hpd" type="number" step="0.5" value="4">
+            <input id="tN_min" type="number" step="0.1" min="0.1">
           </div>
         </div>
       </div>
@@ -96,13 +95,12 @@ Two calculators using the same model + centralized parameters:
 
     <div class="sectionTitle">1) Target Ist → required hours + runs</div>
     <div class="grid">
-      <!-- IST INPUT -->
       <div class="card">
         <h2>Input</h2>
 
         <div class="row">
           <label>Target Ist (Y)</label>
-          <input id="Y" type="number" step="0.1" value="45">
+          <input id="Y" type="number" step="1" min="1" value="45">
         </div>
 
         <button class="btn" id="calcIst">Calculate</button>
@@ -112,56 +110,55 @@ Two calculators using the same model + centralized parameters:
         </p>
       </div>
 
-      <!-- IST OUTPUT -->
       <div class="card">
         <h2>Output</h2>
 
-        <div class="tiny">Required hours</div>
+        <div class="tiny">Required keysets (integer, ceiled)</div>
+        <div class="outBig"><span id="needKeysets">—</span> <span class="tiny">keysets</span></div>
+
+        <div class="tiny">Required hours (for integer keysets)</div>
         <div class="outBig"><span id="needHours">—</span> <span class="tiny">hours</span></div>
-        <div class="tiny" id="needDays">—</div>
 
         <hr class="hr"/>
 
         <div class="tiny mono" id="needRuns">Runs: —</div>
+        <div class="tiny mono" id="needRevenue">—</div>
+        <div class="tiny mono" id="needRate">—</div>
 
-        <hr class="hr"/>
-
-        <div class="tiny mono" id="needDetails">—</div>
         <div class="tiny warn" id="needWarn"></div>
       </div>
     </div>
 
-    <div class="sectionTitle" style="margin-top:18px;">2) Target hours → earned Ist + runs</div>
+    <div class="sectionTitle">2) Target hours → earned Ist + runs</div>
     <div class="grid">
-      <!-- HOURS INPUT -->
       <div class="card">
         <h2>Input</h2>
 
         <div class="row">
           <label>Total hours (H)</label>
-          <input id="H" type="number" step="0.5" value="20">
+          <input id="H" type="number" step="1" min="3" value="20">
         </div>
 
         <button class="btn" id="calcHours">Calculate</button>
 
-        <p class="tiny">This section answers: “If I farm H hours, how many Ist do I earn?”</p>
+        <p class="tiny">Note: we floor keysets (no fractional keyset). This is conservative.</p>
       </div>
 
-      <!-- HOURS OUTPUT -->
       <div class="card">
         <h2>Output</h2>
 
-        <div class="tiny">Earned Ist</div>
+        <div class="tiny">Completed keysets (integer, floored)</div>
+        <div class="outBig"><span id="earnKeysets">—</span> <span class="tiny">keysets</span></div>
+
+        <div class="tiny">Earned Ist (for integer keysets)</div>
         <div class="outBig"><span id="earnIst">—</span> <span class="tiny">Ist</span></div>
-        <div class="tiny" id="earnDays">—</div>
 
         <hr class="hr"/>
 
         <div class="tiny mono" id="earnRuns">Runs: —</div>
+        <div class="tiny mono" id="earnRevenue">—</div>
+        <div class="tiny mono" id="earnRate">—</div>
 
-        <hr class="hr"/>
-
-        <div class="tiny mono" id="earnDetails">—</div>
         <div class="tiny warn" id="earnWarn"></div>
       </div>
     </div>
@@ -172,40 +169,73 @@ Two calculators using the same model + centralized parameters:
     import { computeFromIst, computeFromHours } from "../model/keysPipeline.js";
 
     const el = (id) => document.getElementById(id);
-    const els = {
-      cfgStatus: el("cfgStatus"),
-      extrasNote: el("extrasNote"),
-
-      Dc: el("Dc"), Ds: el("Ds"), Dn: el("Dn"),
-      tC_min: el("tC_min"), tS_min: el("tS_min"), tN_min: el("tN_min"),
-      hpd: el("hpd"),
-
-      Y: el("Y"),
-      H: el("H"),
-
-      needHours: el("needHours"),
-      needDays: el("needDays"),
-      needRuns: el("needRuns"),
-      needDetails: el("needDetails"),
-      needWarn: el("needWarn"),
-
-      earnIst: el("earnIst"),
-      earnDays: el("earnDays"),
-      earnRuns: el("earnRuns"),
-      earnDetails: el("earnDetails"),
-      earnWarn: el("earnWarn"),
-
-      calcIst: el("calcIst"),
-      calcHours: el("calcHours"),
-    };
-
     const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
     const num = (inputEl) => {
       const n = parseFloat(inputEl.value);
       return Number.isFinite(n) ? n : NaN;
     };
 
+    const els = {
+      cfgStatus: el("cfgStatus"),
+      extrasNote: el("extrasNote"),
+
+      Dc: el("Dc"), Ds: el("Ds"), Dn: el("Dn"),
+      tC_min: el("tC_min"), tS_min: el("tS_min"), tN_min: el("tN_min"),
+
+      Y: el("Y"),
+      H: el("H"),
+
+      needKeysets: el("needKeysets"),
+      needHours: el("needHours"),
+      needRuns: el("needRuns"),
+      needRevenue: el("needRevenue"),
+      needRate: el("needRate"),
+      needWarn: el("needWarn"),
+
+      earnKeysets: el("earnKeysets"),
+      earnIst: el("earnIst"),
+      earnRuns: el("earnRuns"),
+      earnRevenue: el("earnRevenue"),
+      earnRate: el("earnRate"),
+      earnWarn: el("earnWarn"),
+
+      calcIst: el("calcIst"),
+      calcHours: el("calcHours"),
+    };
+
     let defaults = null;
+
+    function splitExtras(extras) {
+      // Bonus detection rule: name starts with "Bonus"
+      const bonus = [];
+      const regular = [];
+
+      for (const e of (extras || [])) {
+        const name = String(e.name || "");
+        const priceIst = Number(e.priceIst) || 0;
+        const dropPerRun = Number(e.dropPerRun) || 0;
+        const item = { name, priceIst, dropPerRun };
+
+        if (name.toLowerCase().startsWith("bonus")) bonus.push(item);
+        else regular.push(item);
+      }
+
+      const VbonusC = bonus.reduce((s, e) => s + e.priceIst * e.dropPerRun, 0);
+      const VregularC = regular.reduce((s, e) => s + e.priceIst * e.dropPerRun, 0);
+      return { VbonusC, VregularC, bonus, regular };
+    }
+
+    function baseParams() {
+      return {
+        Dc: num(els.Dc),
+        Ds: num(els.Ds),
+        Dn: num(els.Dn),
+        tC_min: num(els.tC_min),
+        tS_min: num(els.tS_min),
+        tN_min: num(els.tN_min),
+        extras: (defaults && Array.isArray(defaults.extras)) ? defaults.extras : []
+      };
+    }
 
     async function loadDefaults() {
       try {
@@ -222,14 +252,13 @@ Two calculators using the same model + centralized parameters:
         els.tS_min.value = defaults.tS_min;
         els.tN_min.value = defaults.tN_min;
 
-        // Extras note (so it's obvious whether extras are actually active)
-        const extras = Array.isArray(defaults.extras) ? defaults.extras : [];
-        const VextraC = extras.reduce((s, e) => s + (Number(e.priceIst)||0) * (Number(e.dropPerRun)||0), 0);
+        const { VbonusC, VregularC } = splitExtras(defaults.extras);
+        const VextraC = VbonusC + VregularC;
 
         els.extrasNote.textContent =
-          `Extras (Countess-only) loaded: ${extras.length} items. ` +
-          `VextraC ≈ ${fmt(VextraC, 4)} Ist/run(C). ` +
-          (VextraC <= 0 ? "⚠ Extras are currently OFF (dropPerRun=0)." : "Extras are ACTIVE.");
+          `Extras (Countess-only) loaded: ${(defaults.extras||[]).length} items. ` +
+          `VextraC ≈ ${fmt(VextraC, 4)} Ist/run(C) = regular ${fmt(VregularC,4)} + bonus ${fmt(VbonusC,4)}. ` +
+          (VextraC <= 0 ? "⚠ Extras are OFF (dropPerRun=0)." : "Extras are ACTIVE.");
 
         els.cfgStatus.textContent = "loaded";
       } catch (e) {
@@ -238,68 +267,105 @@ Two calculators using the same model + centralized parameters:
       }
     }
 
-    function baseParams() {
+    function integerPlanFromKeysets(K, Dc, Ds, Dn, secPerKeyset, VregularC, VbonusC) {
+      // K is integer keysets
+      const Rc = K / Dc;
+      const Rs = K / Ds;
+      const Rn = K / Dn;
+
+      const hours = (K * secPerKeyset) / 3600;
+
+      const extraRegularIst = Rc * VregularC;
+      const bonusExpectedIst = Rc * VbonusC;
+      const keyIst = K;
+      const totalIst = keyIst + extraRegularIst + bonusExpectedIst;
+
+      const istPerHour = totalIst / hours;
+
       return {
-        Dc: num(els.Dc),
-        Ds: num(els.Ds),
-        Dn: num(els.Dn),
-        tC_min: num(els.tC_min),
-        tS_min: num(els.tS_min),
-        tN_min: num(els.tN_min),
-        extras: (defaults && Array.isArray(defaults.extras)) ? defaults.extras : []
+        K, Rc, Rs, Rn,
+        hours,
+        keyIst,
+        extraRegularIst,
+        bonusExpectedIst,
+        totalIst,
+        istPerHour
       };
     }
 
-    function renderNeed(out) {
-      // Section 1: Y -> hours, runs
-      els.needHours.textContent = fmt(out.totalHours, 2);
+    function calcIst() {
+      const Y = Math.floor(num(els.Y)); // enforce integer
+      els.Y.value = String(Y);
 
-      const hpd = num(els.hpd);
-      els.needDays.textContent = (Number.isFinite(hpd) && hpd > 0)
-        ? `≈ ${fmt(out.totalHours / hpd, 2)} days (at ${fmt(hpd, 1)} h/day)`
-        : "—";
+      const p = baseParams();
+      const out = computeFromIst({ ...p, Y }); // continuous model
+
+      const { VbonusC, VregularC } = splitExtras(p.extras);
+
+      // integer keysets: CEIL so target is achievable
+      const K = Math.max(1, Math.ceil(out.X));
+      const plan = integerPlanFromKeysets(K, p.Dc, p.Ds, p.Dn, out.secPerKeyset, VregularC, VbonusC);
+
+      els.needKeysets.textContent = String(plan.K);
+      els.needHours.textContent = fmt(plan.hours, 2);
 
       els.needRuns.textContent =
-        `Runs: Rc=${fmt(out.Rc, 0)} | Rs=${fmt(out.Rs, 0)} | Rn=${fmt(out.Rn, 0)}`;
+        `Runs (expected): Rc=${fmt(plan.Rc, 0)} | Rs=${fmt(plan.Rs, 0)} | Rn=${fmt(plan.Rn, 0)}`;
 
-      els.needDetails.textContent =
-        `X=${fmt(out.X, 2)} keysets | Ist/hour≈${fmt(out.istPerHour, 3)} | extras≈${fmt(out.extrasIst, 2)} Ist`;
+      els.needRevenue.textContent =
+        `Revenue: keys=${fmt(plan.keyIst,0)} Ist + regular extras=${fmt(plan.extraRegularIst,2)} Ist + bonus(expected)=${fmt(plan.bonusExpectedIst,2)} Ist = total ${fmt(plan.totalIst,2)} Ist`;
 
-      // sanity check: output total should match target Y
-      const Y = num(els.Y);
-      const diff = Math.abs(out.Y_total - Y);
-      els.needWarn.textContent = diff > 0.02 ? `Sanity check: Y_total (${fmt(out.Y_total,2)}) differs from input Y (${fmt(Y,2)}). Check parameters.` : "";
-    }
+      els.needRate.textContent =
+        `Predicted revenue/hour ≈ ${fmt(plan.istPerHour, 3)} Ist/h`;
 
-    function renderEarn(out) {
-      // Section 2: hours -> earned Ist, runs
-      els.earnIst.textContent = fmt(out.Y_total, 2);
-
-      const hpd = num(els.hpd);
-      const H = num(els.H);
-      els.earnDays.textContent = (Number.isFinite(hpd) && hpd > 0)
-        ? `≈ ${fmt(H / hpd, 2)} days (at ${fmt(hpd, 1)} h/day)`
-        : "—";
-
-      els.earnRuns.textContent =
-        `Runs: Rc=${fmt(out.Rc, 0)} | Rs=${fmt(out.Rs, 0)} | Rn=${fmt(out.Rn, 0)}`;
-
-      els.earnDetails.textContent =
-        `X=${fmt(out.X, 2)} keysets | Ist/hour≈${fmt(out.istPerHour, 3)} | extras≈${fmt(out.extrasIst, 2)} Ist`;
-
-      // sanity check: totalHours should match input H (numerically)
-      const diff = Math.abs(out.totalHours - H);
-      els.earnWarn.textContent = diff > 0.02 ? `Sanity check: model hours (${fmt(out.totalHours,2)}) differs from input H (${fmt(H,2)}). Check parameters.` : "";
-    }
-
-    function calcIst() {
-      const out = computeFromIst({ ...baseParams(), Y: num(els.Y) });
-      renderNeed(out);
+      const margin = plan.totalIst - Y;
+      els.needWarn.textContent =
+        `Note: integer keysets means you may exceed target by ≈ ${fmt(margin,2)} Ist (expected).`;
     }
 
     function calcHours() {
-      const out = computeFromHours({ ...baseParams(), hours: num(els.H) });
-      renderEarn(out);
+      const H = Math.floor(num(els.H)); // enforce integer
+      els.H.value = String(H);
+
+      const p = baseParams();
+      const out = computeFromHours({ ...p, hours: H }); // continuous model
+
+      const { VbonusC, VregularC } = splitExtras(p.extras);
+
+      // integer keysets: FLOOR (conservative within given hours)
+      const K = Math.max(0, Math.floor(out.X));
+
+      if (K <= 0) {
+        els.earnKeysets.textContent = "0";
+        els.earnIst.textContent = "0.00";
+        els.earnRuns.textContent = "Runs: Rc=0 | Rs=0 | Rn=0";
+        els.earnRevenue.textContent = "Revenue: keys=0 Ist + regular extras=0 Ist + bonus(expected)=0 Ist";
+        els.earnRate.textContent = `Predicted revenue/hour ≈ 0.000 Ist/h`;
+        els.earnWarn.textContent = `Given H=${H} hours, predicted keysets < 1. Increase hours or reduce run times.`;
+        return;
+      }
+
+      const plan = integerPlanFromKeysets(K, p.Dc, p.Ds, p.Dn, out.secPerKeyset, VregularC, VbonusC);
+
+      // leftover time because we floored keysets
+      const leftover = Math.max(0, H - plan.hours);
+
+      els.earnKeysets.textContent = String(plan.K);
+      els.earnIst.textContent = fmt(plan.totalIst, 2);
+
+      els.earnRuns.textContent =
+        `Runs (expected): Rc=${fmt(plan.Rc, 0)} | Rs=${fmt(plan.Rs, 0)} | Rn=${fmt(plan.Rn, 0)}`;
+
+      els.earnRevenue.textContent =
+        `Revenue: keys=${fmt(plan.keyIst,0)} Ist + regular extras=${fmt(plan.extraRegularIst,2)} Ist + bonus(expected)=${fmt(plan.bonusExpectedIst,2)} Ist = total ${fmt(plan.totalIst,2)} Ist`;
+
+      // average over the whole input hours (not just used time)
+      const avgOverH = plan.totalIst / H;
+      els.earnRate.textContent =
+        `Predicted revenue/hour ≈ ${fmt(avgOverH, 3)} Ist/h (over H=${H}h)`;
+
+      els.earnWarn.textContent =
+        `Flooring keysets leaves ≈ ${fmt(leftover,2)} hours unused in the integer plan (expected).`;
     }
 
     await loadDefaults();
@@ -313,7 +379,7 @@ Two calculators using the same model + centralized parameters:
     els.calcHours.addEventListener("click", calcHours);
 
     // auto-recalc on any input changes
-    ["Dc","Ds","Dn","tC_min","tS_min","tN_min","hpd","Y","H"].forEach(id => {
+    ["Dc","Ds","Dn","tC_min","tS_min","tN_min","Y","H"].forEach(id => {
       el(id).addEventListener("input", () => { calcIst(); calcHours(); });
     });
   </script>
