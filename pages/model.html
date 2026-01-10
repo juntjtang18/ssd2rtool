@@ -37,7 +37,17 @@
     .note{ font-size:12px; color:var(--warn); margin-top:10px; }
     .err{ font-size:12px; color:var(--bad); white-space:pre-wrap; }
     .ok{ color:var(--good); }
-  </style>
+  
+    .cap{ font-weight:900; color:var(--text); }
+    .heroRow .k{ font-weight:900; color:var(--text); }
+    .heroSmallNum{ font-size:26px; font-weight:900; letter-spacing:-0.01em; }
+    .heroBigNum{ font-size:40px; font-weight:900; letter-spacing:-0.02em; }
+    .heroUnit{ font-size:12px; color:var(--muted); margin-left:8px; font-weight:800; }
+    .breakline{ margin-top:6px; font-size:13px; color:var(--text); font-weight:800; }
+    .breakline .mut{ color:var(--muted); font-weight:800; }
+    .itemsLine{ font-size:12px; color:var(--muted); font-family:var(--mono); line-height:1.5; }
+
+</style>
 </head>
 <body>
   <div class="wrap">
@@ -135,78 +145,82 @@
       ].join("");
     }
 
-        function renderFromHours(r, hours) {
-  const out = el("outHours");
-  const s = r.schedule;
-  const k = s.keys;
+            function renderFromHours(r, hours) {
+      const out = el("outHours");
+      const s = r.schedule;
+      const k = s.keys;
 
-  const { extras } = getDefaults();
-  const Rc = s.runs.Rc;
-  const phase = currentPhaseData();
+      const { extras, tC_min, tS_min, tN_min } = getDefaults();
+      const Rc = s.runs.Rc;
+      const Rs = s.runs.Rs;
+      const Rn = s.runs.Rn;
 
-  const regularDrops = [];
-  const bonusDrops = [];
+      const cMin = Rc * tC_min;
+      const sMin = Rs * tS_min;
+      const nMin = Rn * tN_min;
 
-  for (const x of (extras ?? [])) {
-    const rawName = String(x?.name ?? "").trim();
-    const dpr = Number(x?.dropPerRun ?? 0);
-    if (!rawName || !(dpr > 0)) continue;
+      const regularDrops = [];
+      const bonusDrops = [];
 
-    const isBonus = /^BONUS\b/i.test(rawName);
-    const name = isBonus ? rawName.replace(/^BONUS\s*/i, "").trim() : rawName;
-    const qty = Rc * dpr;
+      for (const x of (extras ?? [])) {
+        const rawName = String(x?.name ?? "").trim();
+        const dpr = Number(x?.dropPerRun ?? 0);
+        if (!rawName || !(dpr > 0)) continue;
 
-    const item = { name, qty };
-    if (isBonus) bonusDrops.push(item);
-    else regularDrops.push(item);
-  }
+        const isBonus = /^BONUS\b/i.test(rawName);
+        const name = isBonus ? rawName.replace(/^BONUS\s*/i, "").trim() : rawName;
+        const qty = Rc * dpr;
 
-  const inlineList = (items) => {
-    if (!items.length) return "(none)";
-    return items.map(it => `${it.name}: ${fmt(it.qty,2)}`).join(" · ");
-  };
+        const item = { name, qty };
+        if (isBonus) bonusDrops.push(item);
+        else regularDrops.push(item);
+      }
 
-  const keysInline = `${fmt(k.terror,2)} TKey · ${fmt(k.hate,2)} HKey · ${fmt(k.destruction,2)} DKey`;
-
-  out.innerHTML = `
-    <div class="kv"><div class="k">Farming Time</div><div class="v"><span style="font-size:18px;font-weight:900">${fmt(hours,2)}</span> hour</div></div>
-    <div class="kv"><div class="k">Predicted Revenue</div><div class="v"><span class="big">${fmt(r.rates.istPerHourExclBonus,2)}</span><span class="unit">Ist/hour</span></div></div>
-    <div class="kv"><div class="k">Total revenue</div><div class="v"><span style="font-size:18px;font-weight:900">${fmt(r.values.totalIstExclBonus,2)}</span> Ist</div></div>
-    <div class="sub">Key: ${fmt(r.values.keyIst,2)} Ist, Extras: ${fmt(r.values.extrasRegularIst,2)} Ist &nbsp;&nbsp;·&nbsp;&nbsp; Bonus (Not guaranteed): ${fmt(r.values.bonusIst,2)} Ist</div>
-
-    <div class="divider"></div>
-
-    <div class="sub"><span class="k">Drops</span></div>
-    <div class="mono">${keysInline}</div>
-
-    <div class="divider"></div>
-
-    <div class="sub"><span class="k">Predicted Extra Drops</span></div>
-    <div class="mono" style="line-height:1.5">${inlineList(regularDrops)}</div>
-
-    <div class="divider"></div>
-
-    <div class="sub"><span class="k">Bonus Drops (EV)</span></div>
-    <div class="mono" style="line-height:1.5">${inlineList(bonusDrops)}</div>
-  `;
-}
-
-function renderTarget(result, targetIst) {
-      const out = el("outTarget");
-      const r = result.result;
-      const hours = result.required.hours;
+      const inlineList = (items) => {
+        if (!items.length) return "(none)";
+        return items.map(it => `${it.name}: ${fmt(it.qty,2)}`).join(" · ");
+      };
 
       out.innerHTML = `
-        <div class="kv"><div class="k">Target Ist (exclude bonus)</div><div class="v">${fmt(targetIst,2)} Ist</div></div>
-        <div class="kv"><div class="k">Required hours</div><div class="v">${fmt(hours,2)} hour</div></div>
-        <div class="kv"><div class="k">Predicted revenue</div><div class="v">${fmt(r.rates.istPerHourExclBonus,2)} Ist/hour</div></div>
+        <div class="kv heroRow">
+          <div class="k cap">Farming Time</div>
+          <div class="v"><span class="heroSmallNum">${fmt(hours,2)}</span><span class="heroUnit">hour</span></div>
+        </div>
+
+        <div class="kv heroRow">
+          <div class="k cap">Predicted Revenue</div>
+          <div class="v"><span class="heroBigNum">${fmt(r.rates.istPerHourExclBonus,2)}</span><span class="heroUnit">Ist/hour</span></div>
+        </div>
+
+        <div class="kv heroRow">
+          <div class="k cap">Total revenue</div>
+          <div class="v"><span class="heroSmallNum">${fmt(r.values.totalIstExclBonus,2)}</span><span class="heroUnit">Ist</span></div>
+        </div>
+
+        <div class="breakline">
+          Key: ${fmt(r.values.keyIst,2)} Ist, Extras: ${fmt(r.values.extrasRegularIst,2)} Ist
+          <span class="mut">&nbsp;&nbsp;·&nbsp;&nbsp;Bonus (Not guaranteed): ${fmt(r.values.bonusIst,2)} Ist</span>
+        </div>
 
         <div class="divider"></div>
 
-        <div class="kv"><div class="k">Total revenue</div><div class="v">${fmt(r.values.totalIstExclBonus,2)} Ist</div></div>
-        <div class="sub">Key: ${fmt(r.values.keyIst,2)} Ist, Extras: ${fmt(r.values.extrasRegularIst,2)} Ist</div>
-        <div class="sub">Bonus (Not guaranteed): ${fmt(r.values.bonusIst,2)} Ist</div>
-        <div class="note">Target solving uses bisection over the same EV rotation model.</div>
+        <div class="sub cap">Farming time (by boss)</div>
+        <div class="itemsLine">Countess: ${fmt(cMin,2)} min · Summoner: ${fmt(sMin,2)} min · Nihl: ${fmt(nMin,2)} min</div>
+
+        <div class="divider"></div>
+
+        <div class="sub cap">Drops</div>
+        <div class="itemsLine">${fmt(k.terror,2)} TKey · ${fmt(k.hate,2)} HKey · ${fmt(k.destruction,2)} DKey</div>
+
+        <div class="divider"></div>
+
+        <div class="sub cap">Predicted Extra Drops</div>
+        <div class="itemsLine">${inlineList(regularDrops)}</div>
+
+        <div class="divider"></div>
+
+        <div class="sub cap">Bonus Drops (EV)</div>
+        <div class="itemsLine">${inlineList(bonusDrops)}</div>
       `;
     }
 
