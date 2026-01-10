@@ -1,18 +1,132 @@
 {
+  "tags": ["weapon", "armor", "shield", "helm", "merc", "caster", "melee", "ranged", "utility", "leveling"],
   "runewords": [
     {
       "id": "infinity",
       "name": "Infinity",
       "runes": ["BER", "MAL", "BER", "IST"],
+      "tags": ["weapon", "merc", "utility"],
       "base": "4os polearm/spear",
-      "notes": "Typical merc runeword."
+      "notes": "Classic merc weapon for Conviction."
     },
     {
       "id": "hoto",
       "name": "Heart of the Oak (HOTO)",
       "runes": ["KO", "VEX", "PUL", "THUL"],
-      "base": "4os flail",
-      "notes": "If rune price missing, it will show as N/A."
+      "tags": ["weapon", "caster", "utility"],
+      "base": "4os flail"
+    },
+    {
+      "id": "enigma",
+      "name": "Enigma",
+      "runes": ["JAH", "ITH", "BER"],
+      "tags": ["armor", "utility"],
+      "base": "3os armor"
+    },
+    {
+      "id": "cta",
+      "name": "Call to Arms (CTA)",
+      "runes": ["AMN", "RAL", "MAL", "IST", "OHM"],
+      "tags": ["weapon", "utility"],
+      "base": "5os weapon"
+    },
+    {
+      "id": "grief",
+      "name": "Grief",
+      "runes": ["ETH", "TIR", "LO", "MAL", "RAL"],
+      "tags": ["weapon", "melee"],
+      "base": "5os sword/axe"
+    },
+    {
+      "id": "fortitude",
+      "name": "Fortitude",
+      "runes": ["EL", "SOL", "DOL", "LO"],
+      "tags": ["armor", "merc", "melee"],
+      "base": "4os armor"
+    },
+    {
+      "id": "insight",
+      "name": "Insight",
+      "runes": ["RAL", "TIR", "TAL", "SOL"],
+      "tags": ["weapon", "merc", "utility", "leveling"],
+      "base": "4os polearm/bow"
+    },
+    {
+      "id": "spirit_sword",
+      "name": "Spirit (Sword)",
+      "runes": ["TAL", "THUL", "ORT", "AMN"],
+      "tags": ["weapon", "caster", "leveling"],
+      "base": "4os sword"
+    },
+    {
+      "id": "spirit_shield",
+      "name": "Spirit (Shield)",
+      "runes": ["TAL", "THUL", "ORT", "AMN"],
+      "tags": ["shield", "caster", "leveling"],
+      "base": "4os shield"
+    },
+    {
+      "id": "stealth",
+      "name": "Stealth",
+      "runes": ["TAL", "ETH"],
+      "tags": ["armor", "caster", "leveling"],
+      "base": "2os armor"
+    },
+    {
+      "id": "smoke",
+      "name": "Smoke",
+      "runes": ["NEF", "LUM"],
+      "tags": ["armor", "utility", "leveling"],
+      "base": "2os armor"
+    },
+    {
+      "id": "treachery",
+      "name": "Treachery",
+      "runes": ["SHAEL", "THUL", "LEM"],
+      "tags": ["armor", "merc", "melee", "utility"],
+      "base": "3os armor"
+    },
+    {
+      "id": "crescent_moon",
+      "name": "Crescent Moon",
+      "runes": ["SHAEL", "UM", "TIR"],
+      "tags": ["weapon", "melee"],
+      "base": "3os axe/sword/polearm"
+    },
+    {
+      "id": "doom",
+      "name": "Doom",
+      "runes": ["HEL", "OHM", "UM", "LO", "CHAM"],
+      "tags": ["weapon", "melee", "utility"],
+      "base": "5os axe/polearm/hammer"
+    },
+    {
+      "id": "faith",
+      "name": "Faith",
+      "runes": ["OHM", "JAH", "LEM", "ELD"],
+      "tags": ["weapon", "ranged"],
+      "base": "4os bow"
+    },
+    {
+      "id": "dragon",
+      "name": "Dragon",
+      "runes": ["SUR", "LO", "SOL"],
+      "tags": ["armor", "shield", "utility"],
+      "base": "3os armor/shield"
+    },
+    {
+      "id": "dream",
+      "name": "Dream",
+      "runes": ["IO", "JAH", "PUL"],
+      "tags": ["helm", "shield", "utility"],
+      "base": "3os helm/shield"
+    },
+    {
+      "id": "phoenix",
+      "name": "Phoenix",
+      "runes": ["VEX", "VEX", "LO", "JAH"],
+      "tags": ["shield", "weapon", "utility"],
+      "base": "4os shield/weapon"
     }
   ]
 }
