@@ -169,7 +169,7 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
         const td2 = document.createElement("td");
         td2.className = "mono";
         td2.style.textAlign = "right";
-        td2.textContent = (row.priceIst == null) ? "N/A" : fmt(row.priceIst, 4);
+        td2.textContent = fmt(row.priceIst, 4);
 
         tr.appendChild(td1);
         tr.appendChild(td2);
