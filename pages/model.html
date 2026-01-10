@@ -136,71 +136,62 @@
     }
 
         function renderFromHours(r, hours) {
-      const out = el("outHours");
-      const s = r.schedule;
-      const k = s.keys;
+  const out = el("outHours");
+  const s = r.schedule;
+  const k = s.keys;
 
-      // Build predicted drops lists
-      const { extras } = getDefaults();
-      const Rc = s.runs.Rc;
-      const phase = currentPhaseData();
+  const { extras } = getDefaults();
+  const Rc = s.runs.Rc;
+  const phase = currentPhaseData();
 
-      const regularDrops = [];
-      const bonusDrops = [];
+  const regularDrops = [];
+  const bonusDrops = [];
 
-      for (const x of (extras ?? [])) {
-        const rawName = String(x?.name ?? "").trim();
-        const dpr = Number(x?.dropPerRun ?? 0);
-        if (!rawName || !(dpr > 0)) continue;
+  for (const x of (extras ?? [])) {
+    const rawName = String(x?.name ?? "").trim();
+    const dpr = Number(x?.dropPerRun ?? 0);
+    if (!rawName || !(dpr > 0)) continue;
 
-        const isBonus = /^BONUS\b/i.test(rawName);
-        const name = isBonus ? rawName.replace(/^BONUS\s*/i, "").trim() : rawName;
-        const qty = Rc * dpr;
+    const isBonus = /^BONUS\b/i.test(rawName);
+    const name = isBonus ? rawName.replace(/^BONUS\s*/i, "").trim() : rawName;
+    const qty = Rc * dpr;
 
-        const item = { name, qty };
-        if (isBonus) bonusDrops.push(item);
-        else regularDrops.push(item);
-      }
+    const item = { name, qty };
+    if (isBonus) bonusDrops.push(item);
+    else regularDrops.push(item);
+  }
 
-      const renderList = (items) => {
-        if (!items.length) return "<div class='sub'>(none)</div>";
-        return `<div class="mono" style="line-height:1.7">${items.map(it =>
-          `${it.name}: ${fmt(it.qty,2)}`
-        ).join("<br/>")}</div>`;
-      };
+  const inlineList = (items) => {
+    if (!items.length) return "(none)";
+    return items.map(it => `${it.name}: ${fmt(it.qty,2)}`).join(" · ");
+  };
 
-      out.innerHTML = `
-        <div class="kv"><div class="k">Farming Time</div><div class="v">${fmt(hours,2)} hour</div></div>
-        <div class="kv"><div class="k">Predicted Revenue</div><div class="v"><span class="big">${fmt(r.rates.istPerHourExclBonus,2)}</span><span class="unit">Ist/hour</span></div></div>
+  const keysInline = `${fmt(k.terror,2)} TKey · ${fmt(k.hate,2)} HKey · ${fmt(k.destruction,2)} DKey`;
 
-        <div class="divider"></div>
+  out.innerHTML = `
+    <div class="kv"><div class="k">Farming Time</div><div class="v"><span style="font-size:18px;font-weight:900">${fmt(hours,2)}</span> hour</div></div>
+    <div class="kv"><div class="k">Predicted Revenue</div><div class="v"><span class="big">${fmt(r.rates.istPerHourExclBonus,2)}</span><span class="unit">Ist/hour</span></div></div>
+    <div class="kv"><div class="k">Total revenue</div><div class="v"><span style="font-size:18px;font-weight:900">${fmt(r.values.totalIstExclBonus,2)}</span> Ist</div></div>
+    <div class="sub">Key: ${fmt(r.values.keyIst,2)} Ist, Extras: ${fmt(r.values.extrasRegularIst,2)} Ist &nbsp;&nbsp;·&nbsp;&nbsp; Bonus (Not guaranteed): ${fmt(r.values.bonusIst,2)} Ist</div>
 
-        <div class="kv"><div class="k">Total revenue</div><div class="v">${fmt(r.values.totalIstExclBonus,2)} Ist</div></div>
-        <div class="sub">Key: ${fmt(r.values.keyIst,2)} Ist, Extras: ${fmt(r.values.extrasRegularIst,2)} Ist</div>
-        <div class="sub">Bonus (Not guaranteed): ${fmt(r.values.bonusIst,2)} Ist</div>
+    <div class="divider"></div>
 
-        <div class="divider"></div>
+    <div class="sub"><span class="k">Drops</span></div>
+    <div class="mono">${keysInline}</div>
 
-        <div class="k" style="margin-bottom:6px">Drops</div>
-        <div class="mono" style="line-height:1.7">
-          ${fmt(k.terror,2)} TKey<br/>
-          ${fmt(k.hate,2)} HKey<br/>
-          ${fmt(k.destruction,2)} DKey
-        </div>
+    <div class="divider"></div>
 
-        <div class="divider"></div>
+    <div class="sub"><span class="k">Predicted Extra Drops</span></div>
+    <div class="mono" style="line-height:1.5">${inlineList(regularDrops)}</div>
 
-        <div class="k" style="margin-bottom:6px">Predicted Extra Drops</div>
-        ${renderList(regularDrops)}
+    <div class="divider"></div>
 
-        <div class="divider"></div>
+    <div class="sub"><span class="k">Bonus Drops (EV)</span></div>
+    <div class="mono" style="line-height:1.5">${inlineList(bonusDrops)}</div>
+  `;
+}
 
-        <div class="k" style="margin-bottom:6px">Bonus Drops (EV)</div>
-        ${renderList(bonusDrops)}
-      `;
-    }
-
-        function renderTarget(result, targetIst) {
+function renderTarget(result, targetIst) {
       const out = el("outTarget");
       const r = result.result;
       const hours = result.required.hours;
