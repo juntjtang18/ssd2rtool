@@ -106,7 +106,7 @@
       </div>
     </div>
 
-    <!-- Bottom row: ✅ swapped -->
+    <!-- Bottom row -->
     <div class="grid" style="margin-top:14px;">
       <!-- Rune cost on LEFT -->
       <div class="card">
@@ -138,10 +138,9 @@
     // display-only buffer: ONLY applied to big total hours
     const DISPLAY_BUFFER = 1.10;
 
-    // ✅ formatting rules for UX
+    // formatting rules for UX
     const fmtHours = (x) => (Number.isFinite(x) ? x.toFixed(1) : "—");     // 1 decimal
     const fmtIst1  = (x) => (Number.isFinite(x) ? x.toFixed(1) : "—");     // 1 decimal
-    const fmtIst0  = (x) => (Number.isFinite(x) ? x.toFixed(0) : "—");     // integer
     const asInt    = (x) => String(Math.max(0, Math.round(Number(x || 0)))); // integer count
 
     const els = {
@@ -229,7 +228,6 @@
 
         const td2 = document.createElement("td");
         td2.style.textAlign = "right";
-        // ✅ simpler: integer ist per rune line
         td2.textContent = fmtIst1(row.priceIst);
 
         tr.appendChild(td1);
@@ -251,10 +249,9 @@
     }
 
     function renderPlan(plan) {
-      // ✅ only buffer the big number
+      // buffer only the big number
       els.totalHours.textContent = fmtHours(plan.hours.total * DISPLAY_BUFFER);
 
-      // base plan (no buffer)
       els.planGrid.innerHTML = "";
       const add = (txt, cls="") => {
         const d = document.createElement("div");
@@ -297,7 +294,6 @@
 
         const right = document.createElement("div");
         right.style.textAlign = "right";
-        // ✅ show as integer Ist
         right.textContent = `${Math.round(Number(r.ist || 0))} Ist`;
 
         els.tradeList.appendChild(left);
@@ -305,6 +301,9 @@
       }
     }
 
+    // ✅ New: show all drops defined in drop table with dropRate >= 5% (regular extras),
+    // regardless of price. Small drop rates are omitted.
+    // Bonus stays as "Possible Bonus" (shown if pcs >= 1).
     function renderPredictedDrops(plan) {
       const extras = (plan.predictedDrops && Array.isArray(plan.predictedDrops.extras))
         ? plan.predictedDrops.extras
@@ -312,21 +311,36 @@
       const bonus = (plan.predictedDrops && Array.isArray(plan.predictedDrops.bonus))
         ? plan.predictedDrops.bonus
         : [];
-    
+
       const MIN_RATE = 0.05; // 5%
       const MIN_PCS = 1;
-    
-      const filt = (arr) =>
-        arr
-          .filter(x => Number(x.pcs || 0) >= MIN_PCS)
-          .filter(x => (x.dropRate === undefined ? true : Number(x.dropRate) >= MIN_RATE))
-          .sort((a,b) => (Number(b.dropRate||0) - Number(a.dropRate||0)));
-    
-      const extrasShown = filt(extras);
-      const bonusShown  = filt(bonus);
-    
+
+      const getRateFromDefaults = (name) => {
+        const n = String(name || "").toUpperCase();
+        const arr = Array.isArray(modelDefaults?.extras) ? modelDefaults.extras : [];
+        const found = arr.find(x => String(x.name || x.id || "").toUpperCase().replace(/^BONUS\s*/i,"") === n);
+        const dpr = Number(found?.dropPerRun ?? found?.D ?? found?.rate);
+        return Number.isFinite(dpr) ? dpr : 0;
+      };
+
+      const rate = (x) => {
+        const r = Number(x.dropRate);
+        if (Number.isFinite(r) && r > 0) return r;
+        return getRateFromDefaults(x.name);
+      };
+
+      const extrasShown = extras
+        .map(x => ({ ...x, __r: rate(x) }))
+        .filter(x => Number(x.pcs || 0) >= MIN_PCS)
+        .filter(x => x.__r >= MIN_RATE)
+        .sort((a,b) => b.__r - a.__r);
+
+      const bonusShown = bonus
+        .filter(x => Number(x.pcs || 0) >= MIN_PCS)
+        .sort((a,b) => Number(b.pcs||0) - Number(a.pcs||0));
+
       els.dropsTable.innerHTML = "";
-    
+
       const tr = (k, v, cls="") => {
         const row = document.createElement("tr");
         const td1 = document.createElement("td");
@@ -339,14 +353,16 @@
         row.appendChild(td2);
         return row;
       };
-    
+
       // Always show keysets
       els.dropsTable.appendChild(tr("Keysets", String(plan.keys.keysets), "k"));
-    
+
+      // Regular extras (>=5% drop rate)
       for (const x of extrasShown) {
         els.dropsTable.appendChild(tr(x.name, asInt(x.pcs)));
       }
-    
+
+      // Bonus (Not guaranteed) — show only if pcs>=1
       if (bonusShown.length) {
         els.dropsTable.appendChild(tr("", ""));
         els.dropsTable.appendChild(tr("Possible Bonus (Not Guaranteed)", "", "muted"));
@@ -356,9 +372,7 @@
       }
     }
 
-
     function renderZeroState() {
-      // total cost already rendered by rune breakdown; here we zero the plan
       els.totalHours.textContent = fmtHours(0);
 
       els.planGrid.innerHTML = "";
@@ -390,16 +404,18 @@
       els.tradeList.textContent = "—";
 
       els.dropsTable.innerHTML = "";
-      const row = document.createElement("tr");
-      const td1 = document.createElement("td");
-      td1.className = "k";
-      td1.textContent = "Keysets";
-      const td2 = document.createElement("td");
-      td2.style.textAlign = "right";
-      td2.textContent = "0";
-      row.appendChild(td1);
-      row.appendChild(td2);
-      els.dropsTable.appendChild(row);
+      els.dropsTable.appendChild((() => {
+        const row = document.createElement("tr");
+        const td1 = document.createElement("td");
+        td1.className = "k";
+        td1.textContent = "Keysets";
+        const td2 = document.createElement("td");
+        td2.style.textAlign = "right";
+        td2.textContent = "0";
+        row.appendChild(td1);
+        row.appendChild(td2);
+        return row;
+      })());
     }
 
     function calc() {
@@ -412,7 +428,7 @@
       const b = renderRuneCost(rw, phase);
       const costIst = Number(b.totalIst || 0);
 
-      // ✅ cost=0 => show 0 plan
+      // cost=0 => show 0 plan
       if (!(costIst > 0)) {
         renderZeroState();
         return;
