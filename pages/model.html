@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SSD2R Tool — Keyset Pipeline Model</title>
+  <title>SSD2R Tool — Key Pipeline Model</title>
   <style>
     :root { --bg:#0b0d10; --card:#12161c; --text:#e7eef7; --muted:#9db0c6; --line:#223041; --accent:#7bdcff; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
@@ -37,15 +37,16 @@
 
 <body>
   <div class="wrap">
-    <h1>SSD2R Tool — Keyset Pipeline Model</h1>
+    <h1>SSD2R Tool — Key Pipeline Model</h1>
     <p class="sub">
 Two calculators using the same centralized parameters:
-(1) Target Ist → required hours + runs (C/S/N)
-(2) Target hours → earned Ist + runs (C/S/N)
+(1) Target Ist → required hours + runs (C/S/N)  [closed-form model]
+(2) Target hours → earned Ist + runs (C/S/N)   [discrete simulation, Policy A routing]
 
-Keysets are displayed as INTEGERS:
-- Target Ist: we CEIL keysets so you can actually reach the target.
-- Target hours: we FLOOR keysets (conservative, no fractional keyset).
+Notes:
+- Inputs for Target Ist / Hours are integers (step=1).
+- Hours input has minimum 3 (shorter sessions are too noisy).
+- Simulation values are expected value (EV). Real results vary.
     </p>
 
     <!-- Shared Parameters -->
@@ -70,7 +71,7 @@ Keysets are displayed as INTEGERS:
             <label>Dn (Nihlathak)</label>
             <input id="Dn" type="number" step="0.0001" min="0.0001">
           </div>
-          <p class="tiny">Runs are computed as: Rc=K/Dc, Rs=K/Ds, Rn=K/Dn (K = integer keysets).</p>
+          <p class="tiny">These are expected keys per run (drop probability).</p>
         </div>
 
         <div class="card" style="margin:0;">
@@ -106,17 +107,17 @@ Keysets are displayed as INTEGERS:
         <button class="btn" id="calcIst">Calculate</button>
 
         <p class="tiny">
-<a href="../index.html">← Back to home</a>
+          <a href="../index.html">← Back to home</a>
         </p>
       </div>
 
       <div class="card">
         <h2>Output</h2>
 
-        <div class="tiny">Required keysets (integer, ceiled)</div>
+        <div class="tiny">Required keysets (integer plan)</div>
         <div class="outBig"><span id="needKeysets">—</span> <span class="tiny">keysets</span></div>
 
-        <div class="tiny">Required hours (for integer keysets)</div>
+        <div class="tiny">Required hours (for the integer plan)</div>
         <div class="outBig"><span id="needHours">—</span> <span class="tiny">hours</span></div>
 
         <hr class="hr"/>
@@ -129,7 +130,7 @@ Keysets are displayed as INTEGERS:
       </div>
     </div>
 
-    <div class="sectionTitle">2) Target hours → earned Ist + runs</div>
+    <div class="sectionTitle">2) Target hours → earned Ist + runs (Simulation, Policy A)</div>
     <div class="grid">
       <div class="card">
         <h2>Input</h2>
@@ -139,24 +140,25 @@ Keysets are displayed as INTEGERS:
           <input id="H" type="number" step="1" min="3" value="20">
         </div>
 
-        <button class="btn" id="calcHours">Calculate</button>
+        <button class="btn" id="calcHours">Simulate</button>
 
-        <p class="tiny">Note: we floor keysets (no fractional keyset). This is conservative.</p>
+        <p class="tiny">
+          Policy A routing: always farm the key type you have the least of; if tied, pick the most profitable node (usually Countess due to extras).
+          Keys are valued as banked value (1 key = 1/3 Ist).
+        </p>
       </div>
 
       <div class="card">
         <h2>Output</h2>
 
-        <div class="tiny">Completed keysets (integer, floored)</div>
-        <div class="outBig"><span id="earnKeysets">—</span> <span class="tiny">keysets</span></div>
-
-        <div class="tiny">Earned Ist (for integer keysets)</div>
+        <div class="tiny">Expected total value (banked)</div>
         <div class="outBig"><span id="earnIst">—</span> <span class="tiny">Ist</span></div>
 
         <hr class="hr"/>
 
+        <div class="tiny mono" id="earnKeys">—</div>
         <div class="tiny mono" id="earnRuns">Runs: —</div>
-        <div class="tiny mono" id="earnRevenue">—</div>
+        <div class="tiny mono" id="earnBreakdown">—</div>
         <div class="tiny mono" id="earnRate">—</div>
 
         <div class="tiny warn" id="earnWarn"></div>
@@ -166,7 +168,8 @@ Keysets are displayed as INTEGERS:
   </div>
 
   <script type="module">
-    import { computeFromIst, computeFromHours } from "../model/keysPipeline.js";
+    import { computeFromIst } from "../model/keysPipeline.js";
+    import { simulateBankedKeyValue } from "../model/keysPipelineSim.js";
 
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
@@ -192,10 +195,10 @@ Keysets are displayed as INTEGERS:
       needRate: el("needRate"),
       needWarn: el("needWarn"),
 
-      earnKeysets: el("earnKeysets"),
       earnIst: el("earnIst"),
+      earnKeys: el("earnKeys"),
       earnRuns: el("earnRuns"),
-      earnRevenue: el("earnRevenue"),
+      earnBreakdown: el("earnBreakdown"),
       earnRate: el("earnRate"),
       earnWarn: el("earnWarn"),
 
@@ -206,7 +209,6 @@ Keysets are displayed as INTEGERS:
     let defaults = null;
 
     function splitExtras(extras) {
-      // Bonus detection rule: name starts with "Bonus"
       const bonus = [];
       const regular = [];
 
@@ -268,7 +270,6 @@ Keysets are displayed as INTEGERS:
     }
 
     function integerPlanFromKeysets(K, Dc, Ds, Dn, secPerKeyset, VregularC, VbonusC) {
-      // K is integer keysets
       const Rc = K / Dc;
       const Rs = K / Ds;
       const Rn = K / Dn;
@@ -277,32 +278,29 @@ Keysets are displayed as INTEGERS:
 
       const extraRegularIst = Rc * VregularC;
       const bonusExpectedIst = Rc * VbonusC;
-      const keyIst = K;
-      const totalIst = keyIst + extraRegularIst + bonusExpectedIst;
+      const keysetIst = K; // 1 keyset = 1 Ist
 
+      const totalIst = keysetIst + extraRegularIst + bonusExpectedIst;
       const istPerHour = totalIst / hours;
 
-      return {
-        K, Rc, Rs, Rn,
-        hours,
-        keyIst,
-        extraRegularIst,
-        bonusExpectedIst,
-        totalIst,
-        istPerHour
-      };
+      return { K, Rc, Rs, Rn, hours, keysetIst, extraRegularIst, bonusExpectedIst, totalIst, istPerHour };
+    }
+
+    function clampIntInput(inputEl, min) {
+      const v = Math.floor(num(inputEl));
+      const fixed = Number.isFinite(v) ? Math.max(min, v) : min;
+      inputEl.value = String(fixed);
+      return fixed;
     }
 
     function calcIst() {
-      const Y = Math.floor(num(els.Y)); // enforce integer
-      els.Y.value = String(Y);
-
+      const Y = clampIntInput(els.Y, 1);
       const p = baseParams();
-      const out = computeFromIst({ ...p, Y }); // continuous model
+      const out = computeFromIst({ ...p, Y });
 
       const { VbonusC, VregularC } = splitExtras(p.extras);
 
-      // integer keysets: CEIL so target is achievable
+      // integer keyset plan: CEIL so you reach the target with expectation
       const K = Math.max(1, Math.ceil(out.X));
       const plan = integerPlanFromKeysets(K, p.Dc, p.Ds, p.Dn, out.secPerKeyset, VregularC, VbonusC);
 
@@ -313,7 +311,7 @@ Keysets are displayed as INTEGERS:
         `Runs (expected): Rc=${fmt(plan.Rc, 0)} | Rs=${fmt(plan.Rs, 0)} | Rn=${fmt(plan.Rn, 0)}`;
 
       els.needRevenue.textContent =
-        `Revenue: keys=${fmt(plan.keyIst,0)} Ist + regular extras=${fmt(plan.extraRegularIst,2)} Ist + bonus(expected)=${fmt(plan.bonusExpectedIst,2)} Ist = total ${fmt(plan.totalIst,2)} Ist`;
+        `Revenue: keysets=${fmt(plan.keysetIst,0)} Ist + extras=${fmt(plan.extraRegularIst,2)} Ist + bonus(EV)=${fmt(plan.bonusExpectedIst,2)} Ist = total ${fmt(plan.totalIst,2)} Ist`;
 
       els.needRate.textContent =
         `Predicted revenue/hour ≈ ${fmt(plan.istPerHour, 3)} Ist/h`;
@@ -324,48 +322,38 @@ Keysets are displayed as INTEGERS:
     }
 
     function calcHours() {
-      const H = Math.floor(num(els.H)); // enforce integer
-      els.H.value = String(H);
-
+      const H = clampIntInput(els.H, 3);
       const p = baseParams();
-      const out = computeFromHours({ ...p, hours: H }); // continuous model
 
-      const { VbonusC, VregularC } = splitExtras(p.extras);
+      // Simulation: Policy A routing inside the simulator
+      const sim = simulateBankedKeyValue({
+        hours: H,
+        Dc: p.Dc, Ds: p.Ds, Dn: p.Dn,
+        tC_min: p.tC_min, tS_min: p.tS_min, tN_min: p.tN_min,
+        extras: p.extras,
+        keyIst: 1 / 3,
+        trials: 20000,
+        seed: 12345
+      });
 
-      // integer keysets: FLOOR (conservative within given hours)
-      const K = Math.max(0, Math.floor(out.X));
+      const a = sim.avg;
 
-      if (K <= 0) {
-        els.earnKeysets.textContent = "0";
-        els.earnIst.textContent = "0.00";
-        els.earnRuns.textContent = "Runs: Rc=0 | Rs=0 | Rn=0";
-        els.earnRevenue.textContent = "Revenue: keys=0 Ist + regular extras=0 Ist + bonus(expected)=0 Ist";
-        els.earnRate.textContent = `Predicted revenue/hour ≈ 0.000 Ist/h`;
-        els.earnWarn.textContent = `Given H=${H} hours, predicted keysets < 1. Increase hours or reduce run times.`;
-        return;
-      }
+      els.earnIst.textContent = fmt(a.totalIst, 2);
 
-      const plan = integerPlanFromKeysets(K, p.Dc, p.Ds, p.Dn, out.secPerKeyset, VregularC, VbonusC);
-
-      // leftover time because we floored keysets
-      const leftover = Math.max(0, H - plan.hours);
-
-      els.earnKeysets.textContent = String(plan.K);
-      els.earnIst.textContent = fmt(plan.totalIst, 2);
+      els.earnKeys.textContent =
+        `Keys (EV): T≈${fmt(a.T, 2)} | H≈${fmt(a.H, 2)} | D≈${fmt(a.D, 2)}  (total≈${fmt(a.keys, 2)})`;
 
       els.earnRuns.textContent =
-        `Runs (expected): Rc=${fmt(plan.Rc, 0)} | Rs=${fmt(plan.Rs, 0)} | Rn=${fmt(plan.Rn, 0)}`;
+        `Runs (EV): Rc≈${fmt(a.runsC, 0)} | Rs≈${fmt(a.runsS, 0)} | Rn≈${fmt(a.runsN, 0)}`;
 
-      els.earnRevenue.textContent =
-        `Revenue: keys=${fmt(plan.keyIst,0)} Ist + regular extras=${fmt(plan.extraRegularIst,2)} Ist + bonus(expected)=${fmt(plan.bonusExpectedIst,2)} Ist = total ${fmt(plan.totalIst,2)} Ist`;
+      els.earnBreakdown.textContent =
+        `Value: banked keys≈${fmt(a.keyIst, 2)} Ist + extras≈${fmt(a.extrasIst, 2)} Ist  (VextraC≈${fmt(sim.VextraC, 4)} Ist/runC)`;
 
-      // average over the whole input hours (not just used time)
-      const avgOverH = plan.totalIst / H;
       els.earnRate.textContent =
-        `Predicted revenue/hour ≈ ${fmt(avgOverH, 3)} Ist/h (over H=${H}h)`;
+        `Predicted revenue/hour ≈ ${fmt(a.istPerHour, 3)} Ist/h (EV over H=${H}h)`;
 
       els.earnWarn.textContent =
-        `Flooring keysets leaves ≈ ${fmt(leftover,2)} hours unused in the integer plan (expected).`;
+        `Note: EV only. Variance is high. Keys are valued as banked progress (1 key = 1/3 Ist).`;
     }
 
     await loadDefaults();
@@ -378,7 +366,7 @@ Keysets are displayed as INTEGERS:
     els.calcIst.addEventListener("click", calcIst);
     els.calcHours.addEventListener("click", calcHours);
 
-    // auto-recalc on any input changes
+    // auto-recalc on changes
     ["Dc","Ds","Dn","tC_min","tS_min","tN_min","Y","H"].forEach(id => {
       el(id).addEventListener("input", () => { calcIst(); calcHours(); });
     });
