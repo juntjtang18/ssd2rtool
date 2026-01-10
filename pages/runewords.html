@@ -27,6 +27,7 @@
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
+    /* Planner emphasis */
     .bigNumber { font-size: 44px; font-weight: 950; margin: 6px 0 2px; line-height: 1.0; }
     .bigUnit { font-size: 13px; color: var(--muted); font-weight: 900; margin-left: 6px; }
 
@@ -54,7 +55,9 @@
     <h1>SSD2R Tool — Runewords Planner</h1>
     <div class="sub">Pick a runeword + season phase → get a farming plan.</div>
 
+    <!-- Top row -->
     <div class="grid">
+      <!-- Inputs -->
       <div class="card">
         <h2>Inputs</h2>
 
@@ -85,10 +88,11 @@
         </div>
       </div>
 
+      <!-- Planner -->
       <div class="card">
         <h2>Planner</h2>
 
-        <div class="tiny">Recommended time (+10%)</div>
+        <div class="tiny">Total time</div>
         <div class="bigNumber"><span id="totalHours">—</span><span class="bigUnit">Hours</span></div>
 
         <div class="box" style="margin-top:10px;">
@@ -103,7 +107,9 @@
       </div>
     </div>
 
+    <!-- Bottom row -->
     <div class="grid" style="margin-top:14px;">
+      <!-- Predicted drops -->
       <div class="card">
         <h2>Predicted drops</h2>
         <div class="box">
@@ -111,6 +117,7 @@
         </div>
       </div>
 
+      <!-- Rune cost -->
       <div class="card">
         <h2>Rune cost</h2>
         <div class="bigNumber" style="font-size:34px;">
@@ -130,7 +137,8 @@
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
 
-    // ✅ Display-only buffer (does NOT affect drops/runs/trades)
+    // ✅ Display-only buffer: ONLY applied to the big "Total time" number.
+    // Everything else (boss hours, runs, drops, trade list) stays base.
     const DISPLAY_BUFFER = 1.10;
 
     const els = {
@@ -138,10 +146,12 @@
       q: el("q"),
       rw: el("rw"),
       calc: el("calc"),
+
       totalHours: el("totalHours"),
       planGrid: el("planGrid"),
       targetLine: el("targetLine"),
       tradeList: el("tradeList"),
+
       dropsTable: el("dropsTable"),
       totalCost: el("totalCost"),
       breakdownTable: el("breakdownTable"),
@@ -236,10 +246,11 @@
       return b;
     }
 
+    // ✅ Your final rule:
+    // - Only apply 1.1 to the big "Total time" shown.
+    // - Boss hours + runs are base plan.
     function renderPlan(plan) {
-      // buffered hours for display
-      const totalRecommended = plan.hours.total * DISPLAY_BUFFER;
-      els.totalHours.textContent = fmt(totalRecommended, 2);
+      els.totalHours.textContent = fmt(plan.hours.total * DISPLAY_BUFFER, 2);
 
       els.planGrid.innerHTML = "";
       const add = (txt, cls="") => {
@@ -254,18 +265,17 @@
       add("Runs", "planHdr right");
 
       add("Hell Countess", "planBoss");
-      add(fmt(plan.hours.countess * DISPLAY_BUFFER, 2), "right");
+      add(fmt(plan.hours.countess, 2), "right");
       add(String(plan.runs.countess), "right");
 
       add("Hell Summoner", "planBoss");
-      add(fmt(plan.hours.summoner * DISPLAY_BUFFER, 2), "right");
+      add(fmt(plan.hours.summoner, 2), "right");
       add(String(plan.runs.summoner), "right");
 
       add("Hell Nihlathak", "planBoss");
-      add(fmt(plan.hours.nihl * DISPLAY_BUFFER, 2), "right");
+      add(fmt(plan.hours.nihl, 2), "right");
       add(String(plan.runs.nihl), "right");
 
-      // stop condition is based on the real (non-buffered) plan
       els.targetLine.textContent =
         `Stop at: ${plan.keys.keysets} keysets + extras trades (${plan.bankable.extrasIst} Ist)`;
     }
@@ -304,8 +314,12 @@
     }
 
     function renderPredictedDrops(plan) {
-      const extras = (plan.predictedDrops && Array.isArray(plan.predictedDrops.extras)) ? plan.predictedDrops.extras : [];
-      const bonus  = (plan.predictedDrops && Array.isArray(plan.predictedDrops.bonus))  ? plan.predictedDrops.bonus  : [];
+      const extras = (plan.predictedDrops && Array.isArray(plan.predictedDrops.extras))
+        ? plan.predictedDrops.extras
+        : [];
+      const bonus = (plan.predictedDrops && Array.isArray(plan.predictedDrops.bonus))
+        ? plan.predictedDrops.bonus
+        : [];
 
       els.dropsTable.innerHTML = "";
 
@@ -347,12 +361,13 @@
       const b = renderRuneCost(rw, phase);
       const costIst = b.totalIst;
 
+      // ✅ Model must NOT see buffer. Plan/drops are base.
       const plan = planRotationToTargetIst({
         targetIst: costIst,
         phase,
         priceTable,
         params: modelDefaults,
-        buffer: 1.0 // ✅ model buffer is ALWAYS 1.0
+        buffer: 1.0
       });
 
       renderPlan(plan);
@@ -360,6 +375,7 @@
       renderPredictedDrops(plan);
     }
 
+    // init
     priceTable = await loadPriceTable();
     runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
