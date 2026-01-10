@@ -1,29 +1,32 @@
 // /model/modelCore.js
-// Theory EV model for D2R key farming rotation (Countess / Summoner / Nihl).
-// File-structure assumptions (site root):
+// D2R Keys Model — Theory EV using "1-key-at-a-time" scheduling per boss.
+// Repo file structure assumptions:
 //   /config/model-parameters.json
 //   /config/rune-price-table.json
+//   /pages/model.html imports this module via: ../model/modelCore.js
 //
-// Key ideas:
-// - NO ceil/floor/bankable constraints (pure EV)
-// - Rotation closes via balanced production: keysets throughput determined by minutes/keyset
-// - Extras + bonus are injected ONLY through Countess runs/time
-// - Bonus items are identified by name prefix "BONUS " in model-parameters extras list
+// Algorithm (as specified by user):
+// A) For each boss i in rotation (C -> S -> N -> ...):
+//    - Expected runs to get 1 key: runsPerKey = 1 / D_i
+//    - Expected time to get 1 key: timePerKey = runsPerKey * t_i
+//    - If remaining time >= timePerKey: gain 1 key; spend timePerKey; add runsPerKey
+//      Else: gain fractional key = remaining / timePerKey; add fractional runs; spend remaining; stop.
+//    - If boss is Countess, accumulate countess_runs.
+// B) extras EV and bonus EV are computed from countess_runs only.
+// C) Key value uses: 1 key = 1/3 Ist (implied by 1 keyset=1 Ist).
+//    totalIstExclBonus = keyIst + extrasRegularIst
+//    bonusIst is tracked separately.
 //
-// Price-table convention: { "O": items, "N": ist } => 1 item = N/O Ist
+// Note: We optimize by grouping full "key-cycles" (C,S,N) where we complete 1 key each boss.
 
-async function fetchJson(path) {
-  const res = await fetch(path, { cache: "no-store" });
-  if (!res.ok) throw new Error(`${path}: ${res.status} ${res.statusText}`);
+async function fetchJson(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`${url}: ${res.status} ${res.statusText}`);
   return res.json();
 }
 
 export async function loadModelConfigs() {
-  // IMPORTANT for GitHub Pages under a repo subpath:
-  // Use URLs relative to this module file (/model/modelCore.js),
-  // so it works at:
-  //   https://<user>.github.io/<repo>/...
-  // not only at domain root.
+  // GitHub Pages project site safe: resolve relative to this module's URL.
   const mpUrl = new URL("../config/model-parameters.json", import.meta.url);
   const ptUrl = new URL("../config/rune-price-table.json", import.meta.url);
 
@@ -31,7 +34,8 @@ export async function loadModelConfigs() {
     fetchJson(mpUrl.href),
     fetchJson(ptUrl.href),
   ]);
-  return { modelParameters, priceTable };
+
+  return { modelParameters, priceTable, paths: { mp: mpUrl.href, pt: ptUrl.href } };
 }
 
 export function getPhaseOptions(priceTable) {
@@ -41,6 +45,7 @@ export function getPhaseOptions(priceTable) {
   return { phases, defaultPhase };
 }
 
+// Price-table convention: { O: items, N: ist } => 1 item = N/O Ist
 export function priceInIst(name, phaseData) {
   const entry = phaseData?.[name];
   if (!entry) return 0;
@@ -68,156 +73,175 @@ function splitExtras(extras) {
   return { regular, bonus };
 }
 
+function extrasValuePerCountessRun(extras, phaseData) {
+  const { regular, bonus } = splitExtras(extras);
+  const vRegular = regular.reduce((acc, x) => acc + x.dropPerRun * priceInIst(x.name, phaseData), 0);
+  const vBonus = bonus.reduce((acc, x) => acc + x.dropPerRun * priceInIst(x.name, phaseData), 0);
+  return { vRegular, vBonus, regular, bonus };
+}
+
+function scheduleFromHours({
+  hours, Dc, Ds, Dn, tC_min, tS_min, tN_min
+}) {
+  const H = Number(hours);
+  const totalMin = H * 60;
+
+  // Expected runs/time for 1 key at each boss
+  const rpkC = 1 / Dc, rpkS = 1 / Ds, rpkN = 1 / Dn;
+  const tpkC = rpkC * tC_min, tpkS = rpkS * tS_min, tpkN = rpkN * tN_min;
+
+  const cycleMin = tpkC + tpkS + tpkN;
+  if (!(cycleMin > 0)) throw new Error("Invalid cycleMin (check D and t).");
+
+  // Full cycles: 1 key per boss
+  const fullCycles = Math.floor(totalMin / cycleMin);
+  let rem = totalMin - fullCycles * cycleMin;
+
+  // Keys gained (EV, can be fractional only for the last boss in the tail)
+  let kT = fullCycles, kH = fullCycles, kD = fullCycles;
+
+  // Runs used (EV, generally fractional due to 1/D)
+  let Rc = fullCycles * rpkC;
+  let Rs = fullCycles * rpkS;
+  let Rn = fullCycles * rpkN;
+
+  // Tail: try to complete +1 key for C, then S, then N, and last one may be fractional
+  const tail = [];
+  function step(label, tpk, rpk) {
+    if (rem <= 1e-12) return { done: true, fracKey: 0, timeUsed: 0, runsUsed: 0 };
+    if (rem >= tpk) {
+      rem -= tpk;
+      tail.push({ boss: label, key: 1, timeMin: tpk, runs: rpk, fractional: false });
+      return { done: false, fracKey: 1, timeUsed: tpk, runsUsed: rpk };
+    } else {
+      const frac = rem / tpk;
+      const timeUsed = rem;
+      rem = 0;
+      const runsUsed = rpk * frac;
+      tail.push({ boss: label, key: frac, timeMin: timeUsed, runs: runsUsed, fractional: true });
+      return { done: true, fracKey: frac, timeUsed, runsUsed };
+    }
+  }
+
+  let s = step("C", tpkC, rpkC);
+  kT += s.fracKey; Rc += s.runsUsed;
+  if (!s.done) {
+    s = step("S", tpkS, rpkS);
+    kH += s.fracKey; Rs += s.runsUsed;
+  }
+  if (!s.done) {
+    s = step("N", tpkN, rpkN);
+    kD += s.fracKey; Rn += s.runsUsed;
+  }
+
+  const usedMin = totalMin - rem;
+  const countessMin = Rc * tC_min;
+
+  return {
+    totalMin,
+    usedMin,
+    unusedMin: rem,
+    fullCycles,
+    cycleMin,
+    runs: { Rc, Rs, Rn },
+    keys: { terror: kT, hate: kH, destruction: kD },
+    timePerKey: { C: tpkC, S: tpkS, N: tpkN },
+    runsPerKey: { C: rpkC, S: rpkS, N: rpkN },
+    tail,
+    countessMin,
+  };
+}
 
 export function computeTheoryFromHours(params) {
   const H = Number(params?.hours);
   if (!(H > 0)) throw new Error("hours must be > 0");
 
   const Dc = Number(params?.Dc), Ds = Number(params?.Ds), Dn = Number(params?.Dn);
-  const tC = Number(params?.tC_min), tS = Number(params?.tS_min), tN = Number(params?.tN_min);
+  const tC_min = Number(params?.tC_min), tS_min = Number(params?.tS_min), tN_min = Number(params?.tN_min);
   const phaseData = params?.phaseData ?? {};
   const extras = params?.extras ?? [];
 
-  // --- Run scheduling (as requested) ---
-  // We run: Countess -> Summoner -> Nihl, repeating.
-  // The last run is fractional based on remaining time, so at most ONE of Rc/Rs/Rn is fractional.
-  const totalMin = H * 60;
-  const cycleMin = tC + tS + tN;
-  if (!(cycleMin > 0)) throw new Error("Invalid inputs: tC+tS+tN must be > 0");
+  const sched = scheduleFromHours({ hours: H, Dc, Ds, Dn, tC_min, tS_min, tN_min });
 
-  const fullCycles = Math.floor(totalMin / cycleMin);
-  let remaining = totalMin - fullCycles * cycleMin;
+  // Key value: 1 key = 1/3 Ist
+  const kT = sched.keys.terror, kH = sched.keys.hate, kD = sched.keys.destruction;
+  const keyIst = (kT + kH + kD) / 3;
+  const keysetsEV = Math.min(kT, kH, kD);
 
-  let Rc = fullCycles, Rs = fullCycles, Rn = fullCycles;
+  const { vRegular, vBonus } = extrasValuePerCountessRun(extras, phaseData);
+  const Rc = sched.runs.Rc;
 
-  // Add partial cycle in order C -> S -> N (only one can be fractional)
-  if (remaining > 1e-12) {
-    const fracC = Math.min(1, remaining / tC);
-    Rc += fracC;
-    remaining -= fracC * tC;
+  const extrasRegularIst = Rc * vRegular;
+  const bonusIst = Rc * vBonus;
 
-    if (remaining > 1e-12) {
-      const fracS = Math.min(1, remaining / tS);
-      Rs += fracS;
-      remaining -= fracS * tS;
-
-      if (remaining > 1e-12) {
-        const fracN = Math.min(1, remaining / tN);
-        Rn += fracN;
-        remaining -= fracN * tN;
-      }
-    }
-  }
-
-  // Expected keys (decimal EV) from scheduled runs
-  const kT = Rc * Dc;
-  const kH = Rs * Ds;
-  const kD = Rn * Dn;
-
-  // Keysets sellable as balanced sets (theoretical EV): limited by the minimum of the 3 streams
-  const keysets = Math.min(kT, kH, kD);
-
-  const { regular, bonus } = splitExtras(extras);
-  const vRegularPerCRun = regular.reduce((acc, x) => acc + x.dropPerRun * priceInIst(x.name, phaseData), 0);
-  const vBonusPerCRun = bonus.reduce((acc, x) => acc + x.dropPerRun * priceInIst(x.name, phaseData), 0);
-
-  const keysIst = keysets; // 1 keyset = 1 Ist
-  const extrasRegularIst = Rc * vRegularPerCRun;
-  const bonusIst = Rc * vBonusPerCRun;
-
-  const totalIstExclBonus = keysIst + extrasRegularIst;
+  const totalIstExclBonus = keyIst + extrasRegularIst;
   const totalIstInclBonus = totalIstExclBonus + bonusIst;
 
   return {
-    keysets,
-    keys: { terror: kT, hate: kH, destruction: kD },
-    runs: { Rc, Rs, Rn },
-    minutes: {
-      totalMin,
-      cycleMin,
-      fullCycles,
-      // time actually spent on Countess drives extras/bonus
-      countessMin: Rc * tC,
-      // leftover after partial cycle (should be ~0)
-      unusedMin: Math.max(0, remaining),
-    },
+    schedule: sched,
     values: {
-      keysIst,
+      keyIst,
+      keysetsEV,
       extrasRegularIst,
-      totalIstExclBonus,
       bonusIst,
+      totalIstExclBonus,
       totalIstInclBonus,
     },
     rates: {
       istPerHourExclBonus: totalIstExclBonus / H,
       bonusPerHour: bonusIst / H,
       istPerHourInclBonus: totalIstInclBonus / H,
-      keysetsPerHour: keysets / H,
+      keysetsPerHourEV: keysetsEV / H,
+      keysPerHourEV: { terror: kT / H, hate: kH / H, destruction: kD / H },
     }
   };
 }
 
-
+// Find hours needed to reach target Ist (exclude bonus) using bisection (monotonic).
 export function computeTheoryFromTargetIst(params) {
   const Y = Number(params?.targetIst);
   if (!(Y > 0)) throw new Error("targetIst must be > 0");
 
   const Dc = Number(params?.Dc), Ds = Number(params?.Ds), Dn = Number(params?.Dn);
-  const tC = Number(params?.tC_min), tS = Number(params?.tS_min), tN = Number(params?.tN_min);
+  const tC_min = Number(params?.tC_min), tS_min = Number(params?.tS_min), tN_min = Number(params?.tN_min);
   const phaseData = params?.phaseData ?? {};
   const extras = params?.extras ?? [];
 
-  const minPerKeyset = (tC / Dc) + (tS / Ds) + (tN / Dn);
-  if (!(minPerKeyset > 0)) throw new Error("Invalid inputs: minPerKeyset <= 0 (check D and t).");
+  const f = (hours) => computeTheoryFromHours({
+    hours,
+    Dc, Ds, Dn,
+    tC_min, tS_min, tN_min,
+    extras,
+    phaseData
+  });
 
-  const { regular, bonus } = splitExtras(extras);
-  const vRegularPerCRun = regular.reduce((acc, x) => acc + x.dropPerRun * priceInIst(x.name, phaseData), 0);
-  const vBonusPerCRun = bonus.reduce((acc, x) => acc + x.dropPerRun * priceInIst(x.name, phaseData), 0);
+  // Upper bound search
+  let lo = 0;
+  let hi = Math.max(0.25, Y / 0.5); // start somewhat safely
+  let rHi = f(hi);
+  let guard = 0;
+  while (rHi.values.totalIstExclBonus < Y && guard < 40) {
+    hi *= 2;
+    rHi = f(hi);
+    guard++;
+  }
+  if (guard >= 40) throw new Error("Failed to bracket target hours (check parameters).");
 
-  // Per keyset: 1 Ist from keys + (Countess runs per keyset)*(regular extra value per C run)
-  const istPerKeysetExclBonus = 1 + (vRegularPerCRun / Dc);
-  const bonusPerKeyset = (vBonusPerCRun / Dc);
-
-  const keysets = Y / istPerKeysetExclBonus;
-  const totalMin = keysets * minPerKeyset;
-  const hours = totalMin / 60;
-
-  const Rc = keysets / Dc;
-  const Rs = keysets / Ds;
-  const Rn = keysets / Dn;
-
-  const keysIst = keysets;
-  const extrasRegularIst = Rc * vRegularPerCRun;
-  const bonusIst = Rc * vBonusPerCRun;
-
-  const totalIstExclBonus = keysIst + extrasRegularIst;
-  const totalIstInclBonus = totalIstExclBonus + bonusIst;
+  // Bisection
+  let best = rHi;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    const rMid = f(mid);
+    if (rMid.values.totalIstExclBonus >= Y) {
+      hi = mid;
+      best = rMid;
+    } else {
+      lo = mid;
+    }
+  }
 
   return {
-    required: { hours, keysets, runs: { Rc, Rs, Rn } },
-    minutes: {
-      totalMin,
-      minPerKeyset,
-      countessMin: Rc * tC,
-    },
-    values: {
-      keysIst,
-      extrasRegularIst,
-      totalIstExclBonus,
-      bonusIst,
-      totalIstInclBonus,
-    },
-    rates: {
-      istPerHourExclBonus: totalIstExclBonus / hours,
-      bonusPerHour: bonusIst / hours,
-      istPerHourInclBonus: totalIstInclBonus / hours,
-      keysetsPerHour: keysets / hours,
-    },
-    perKeyset: {
-      min: minPerKeyset,
-      istExclBonus: istPerKeysetExclBonus,
-      bonusIst: bonusPerKeyset,
-      countessRuns: 1 / Dc,
-    }
+    required: { hours: hi },
+    result: best
   };
 }
