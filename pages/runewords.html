@@ -7,18 +7,19 @@
   <style>
     :root { --bg:#0b0d10; --card:#12161c; --text:#e7eef7; --muted:#9db0c6; --line:#223041; --accent:#7bdcff; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
-    .wrap { max-width: 980px; margin: 0 auto; padding: 22px 16px 40px; }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 22px 16px 40px; }
     h1 { margin: 6px 0 8px; font-size: 22px; }
     .sub { color:var(--muted); margin: 0 0 16px; line-height: 1.55; white-space: pre-line; }
+
     .grid { display:grid; grid-template-columns: 1fr; gap: 14px; }
     @media (min-width: 980px){ .grid { grid-template-columns: 1fr 1fr; } }
+
     .card { background:var(--card); border:1px solid var(--line); border-radius: 14px; padding: 14px; }
-    .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); font-weight: 800; letter-spacing: .2px; }
+    .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); font-weight: 900; letter-spacing: .2px; }
     .row { display:flex; gap:10px; align-items:center; margin: 10px 0; }
     label { flex: 1; color:var(--muted); font-size: 13px; }
     select, input { width: 260px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
     .btn { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: var(--accent); color:#05202a; font-weight: 900; cursor:pointer; margin-top: 8px; }
-    .hr { height:1px; background:var(--line); margin: 12px 0; border:0; }
     .tiny { color:var(--muted); font-size: 12px; line-height: 1.55; white-space: pre-line; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
     a { color: var(--accent); text-decoration: none; }
@@ -26,19 +27,27 @@
 
     /* Planner emphasis */
     .bigNumber { font-size: 44px; font-weight: 950; margin: 6px 0 2px; line-height: 1.0; }
-    .bigUnit { font-size: 13px; color: var(--muted); font-weight: 800; margin-left: 6px; }
+    .bigUnit { font-size: 13px; color: var(--muted); font-weight: 900; margin-left: 6px; }
     .planBox { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background:#0f1318; }
     .planGrid { display:grid; grid-template-columns: 1fr 110px 110px; gap: 8px 10px; align-items:center; }
-    .planHdr { color: var(--muted); font-weight: 800; font-size: 12px; }
+    .planHdr { color: var(--muted); font-weight: 900; font-size: 12px; }
     .planBoss { color: var(--accent); font-weight: 950; font-size: 14px; }
     .planCell { font-size: 14px; }
     .right { text-align:right; }
-    .stopLine { margin-top: 10px; font-size: 14px; font-weight: 850; }
+    .stopLine { margin-top: 10px; font-size: 14px; font-weight: 950; }
 
     /* Trade list */
     .tradeGrid { display:grid; grid-template-columns: 1fr 160px; gap: 6px 12px; margin-top: 8px; }
     .tradeGrid div { padding: 2px 0; }
-    .tradeKey { color: var(--accent); font-weight: 900; }
+    .tradeKey { color: var(--accent); font-weight: 950; }
+
+    /* Drops */
+    .dropsBox { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background:#0f1318; }
+    .dropsTitle { color: var(--muted); font-weight: 950; font-size: 12px; margin-bottom: 8px; }
+    .dropsTable { width:100%; border-collapse: collapse; }
+    .dropsTable td { padding: 6px 0; border-bottom: 1px solid #1c2735; }
+    .dropsName { color: var(--accent); font-weight: 900; }
+    .muted { color: var(--muted); }
 
     table { width:100%; border-collapse: collapse; }
     td { padding: 6px 0; border-bottom: 1px solid #1c2735; }
@@ -50,6 +59,7 @@
     <h1>SSD2R Tool — Runewords Planner</h1>
     <p class="sub">Pick a runeword + season phase → get a farming plan.</p>
 
+    <!-- Top row -->
     <div class="grid">
       <!-- Inputs -->
       <div class="card">
@@ -89,7 +99,7 @@
         </p>
       </div>
 
-      <!-- Planner Output (NO cost here) -->
+      <!-- Planner Output -->
       <div class="card">
         <h2>Farming Plan</h2>
 
@@ -102,13 +112,25 @@
         </div>
 
         <div class="planBox" style="margin-top:12px;">
-          <div class="tiny" style="font-weight:900; color:var(--muted); margin-bottom:6px;">Trade list (extras)</div>
+          <div class="tiny" style="font-weight:950; color:var(--muted); margin-bottom:6px;">Trade list (extras)</div>
           <div class="tradeGrid mono" id="tradeList">—</div>
         </div>
       </div>
+    </div>
 
-      <!-- Rune breakdown (Cost lives here) -->
-      <div class="card" style="grid-column: 1 / -1;">
+    <!-- Bottom row -->
+    <div class="grid" style="margin-top:14px;">
+      <!-- Predicted drops -->
+      <div class="card">
+        <h2>Total Drops Predicted</h2>
+        <div class="dropsBox">
+          <div class="dropsTitle mono">Keys (EV) + Extras (EV)</div>
+          <table class="dropsTable mono" id="dropsTable"></table>
+        </div>
+      </div>
+
+      <!-- Rune breakdown -->
+      <div class="card">
         <h2>Rune breakdown</h2>
         <div class="tiny mono" id="baseLine">—</div>
         <div class="bigNumber" style="font-size:34px; margin-top:10px;">
@@ -127,6 +149,7 @@
 
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
+    const fmtInt = (x) => (Number.isFinite(x) ? String(Math.round(x)) : "—");
 
     const els = {
       phase: el("phase"),
@@ -140,12 +163,14 @@
       targetKeys: el("targetKeys"),
       tradeList: el("tradeList"),
 
+      dropsTable: el("dropsTable"),
+
       baseLine: el("baseLine"),
       totalCost: el("totalCost"),
       tbl: el("tbl"),
     };
 
-    // Fixed planner buffer (no UI option)
+    // Fixed planner buffer
     const BUFFER = 1.10;
 
     let priceTable = null;
@@ -236,6 +261,7 @@
 
       for (const row of b.rows) {
         const tr = document.createElement("tr");
+
         const td1 = document.createElement("td");
         td1.className = "mono";
         td1.textContent = row.rune;
@@ -264,8 +290,7 @@
       return b;
     }
 
-    // ----- Unified (O,N) pricing rule from price table -----
-    // quote: { O, N, priceIst }
+    // ----- Unified (O,N) pricing rule -----
     function computeBankableExtras({ RcTotal, phase }) {
       const extras = Array.isArray(modelDefaults.extras) ? modelDefaults.extras : [];
       const rows = [];
@@ -277,25 +302,15 @@
         if (!name || !Number.isFinite(dpr) || dpr <= 0) continue;
 
         const q = getRuneQuote(priceTable, phase, name);
-        if (!(q.N > 0) || !(q.O > 0)) continue; // not tradable / free / unknown
+        if (!(q.N > 0) || !(q.O > 0)) continue;
 
-        const pieces = Math.floor(RcTotal * dpr);
-        const orders = Math.floor(pieces / q.O);
-        const rem = pieces - orders * q.O;
+        const piecesInt = Math.floor(RcTotal * dpr);
+        const orders = Math.floor(piecesInt / q.O);
+        const rem = piecesInt - orders * q.O;
         const ist = orders * q.N;
 
         bankableIst += ist;
-
-        rows.push({
-          name,
-          pieces,
-          O: q.O,
-          N: q.N,
-          orders,
-          rem,
-          dpr,
-          ist
-        });
+        rows.push({ name, dpr, O: q.O, N: q.N, piecesInt, orders, rem, ist });
       }
 
       rows.sort((a,b)=> b.ist - a.ist);
@@ -314,9 +329,6 @@
     }
 
     function topUpCountessRunsToBankableTarget({ baseRc, keysetsTarget, costIst, phase }) {
-      // Keys banked: keysetsTarget Ist (since 1 keyset = 1 Ist)
-      // Extras banked: integer Ist via O/N orders
-      // Goal: >= ceil(costIst) bankable total
       const targetBankable = Math.ceil(costIst);
 
       let RcTotal = baseRc;
@@ -330,9 +342,7 @@
           return { RcTotal, rows, bankableIst, targetBankable };
         }
 
-        // Choose the quickest next +N Ist order among extras
         let best = { addRuns: Infinity, row: null };
-
         for (const r of rows) {
           const addRunsEV = runsNeededForNextOrder({ RcTotal, row: r });
           if (addRunsEV < best.addRuns) best = { addRuns: addRunsEV, row: r };
@@ -388,13 +398,12 @@
       let totalBankable = 0;
 
       for (const r of rows) {
-        if (r.ist <= 0 && r.pieces <= 0) continue;
+        if (r.ist <= 0) continue;
 
         totalBankable += r.ist;
 
         const left = document.createElement("div");
-        left.innerHTML =
-          `<span class="tradeKey">${r.name}</span>  (${r.O}×${r.orders}${r.rem > 0 ? `, rem ${r.rem}` : ""})`;
+        left.innerHTML = `<span class="tradeKey">${r.name}</span>  (${r.O}×${r.orders}${r.rem > 0 ? `, rem ${r.rem}` : ""})`;
 
         const right = document.createElement("div");
         right.className = "right";
@@ -413,6 +422,55 @@
       els.tradeList.appendChild(r2);
     }
 
+    function renderPredictedDrops({ Rc, Rs, Rn, phase, keysetsTarget, extrasRows }) {
+      // EV keys from planned runs
+      const Dc = Number(modelDefaults.Dc);
+      const Ds = Number(modelDefaults.Ds);
+      const Dn = Number(modelDefaults.Dn);
+
+      const evT = (Number.isFinite(Dc) ? Rc * Dc : NaN);
+      const evH = (Number.isFinite(Ds) ? Rs * Ds : NaN);
+      const evD = (Number.isFinite(Dn) ? Rn * Dn : NaN);
+
+      const tr = (k, v, cls="") => {
+        const row = document.createElement("tr");
+        const td1 = document.createElement("td");
+        td1.className = cls || "";
+        td1.textContent = k;
+        const td2 = document.createElement("td");
+        td2.className = "right";
+        td2.textContent = v;
+        row.appendChild(td1);
+        row.appendChild(td2);
+        return row;
+      };
+
+      els.dropsTable.innerHTML = "";
+
+      // Keys section
+      els.dropsTable.appendChild(tr("Keys", "", "muted"));
+      els.dropsTable.appendChild(tr("TKey (Countess EV)", fmt(evT, 2)));
+      els.dropsTable.appendChild(tr("HKey (Summoner EV)", fmt(evH, 2)));
+      els.dropsTable.appendChild(tr("DKey (Nihl EV)", fmt(evD, 2)));
+      els.dropsTable.appendChild(tr("Stop target (banked)", `${keysetsTarget}/${keysetsTarget}/${keysetsTarget}`));
+
+      // Spacer
+      els.dropsTable.appendChild(tr("Extras (Countess EV)", "", "muted"));
+
+      // Extras EV pieces + bankable orders
+      // Use the same extras rows computed from integer pieces (piecesInt) for realistic “orders/rem”
+      // Also show EV pieces (Rc*dpr) to visualize expected drops.
+      for (const r of (extrasRows || [])) {
+        const evPieces = Rc * r.dpr;
+        // show only meaningful extras
+        if (!(r.O > 0 && r.N > 0)) continue;
+
+        const label = `${r.name}`;
+        const val = `EV≈${fmt(evPieces, 1)} pcs | ${r.O}×${r.orders}${r.rem ? `, rem ${r.rem}` : ""}`;
+        els.dropsTable.appendChild(tr(label, val));
+      }
+    }
+
     function calc() {
       const phase = els.phase.value;
       localStorage.setItem("seasonPhase", phase);
@@ -423,7 +481,6 @@
       const b = renderBreakdown(rw, phase);
       const costIst = b.totalIst;
 
-      // Base pipeline outputs (EV)
       const out = computeFromIst({
         Y: costIst,
         Dc: modelDefaults.Dc,
@@ -435,15 +492,12 @@
         extras: modelDefaults.extras
       });
 
-      // Key target (banked as integer keysets)
       const keysetsTarget = Math.ceil(out.X * BUFFER);
 
-      // Base runs from pipeline, buffered & integer
       const baseRc = Math.ceil(out.Rc * BUFFER);
       const baseRs = Math.ceil(out.Rs * BUFFER);
       const baseRn = Math.ceil(out.Rn * BUFFER);
 
-      // Top-up Countess runs so extras can be sold in integer Ist orders
       const topup = topUpCountessRunsToBankableTarget({
         baseRc,
         keysetsTarget,
@@ -455,7 +509,6 @@
       const RsPlan = baseRs;
       const RnPlan = baseRn;
 
-      // Hours
       const hC = (RcPlan * modelDefaults.tC_min) / 60;
       const hS = (RsPlan * modelDefaults.tS_min) / 60;
       const hN = (RnPlan * modelDefaults.tN_min) / 60;
@@ -463,15 +516,21 @@
 
       els.totalHours.textContent = fmt(totalHoursPlan, 2);
 
-      renderPlanGrid({
-        hC, hS, hN,
-        Rc: RcPlan, Rs: RsPlan, Rn: RnPlan
-      });
+      renderPlanGrid({ hC, hS, hN, Rc: RcPlan, Rs: RsPlan, Rn: RnPlan });
 
       els.targetKeys.textContent =
         `Stop at: ${keysetsTarget} TKey + ${keysetsTarget} HKey + ${keysetsTarget} DKey`;
 
       renderTradeList({ rows: topup.rows });
+
+      renderPredictedDrops({
+        Rc: RcPlan,
+        Rs: RsPlan,
+        Rn: RnPlan,
+        phase,
+        keysetsTarget,
+        extrasRows: topup.rows
+      });
     }
 
     // init
@@ -479,22 +538,8 @@
     runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
 
-    // tags
-    els.tag.innerHTML = "";
-    const optAll = document.createElement("option");
-    optAll.value = "all";
-    optAll.textContent = "All";
-    els.tag.appendChild(optAll);
-    for (const t of (runewordsData.tags || [])) {
-      const opt = document.createElement("option");
-      opt.value = t;
-      opt.textContent = t;
-      els.tag.appendChild(opt);
-    }
-
+    populateTagOptions();
     setPhaseDefault();
-
-    // initial runeword list
     renderRunewordOptions();
 
     els.calc.addEventListener("click", calc);
