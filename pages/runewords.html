@@ -16,7 +16,7 @@
     .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); font-weight: 700; }
     .row { display:flex; gap:10px; align-items:center; margin: 10px 0; }
     label { flex: 1; color:var(--muted); font-size: 13px; }
-    select, input { width: 220px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
+    select, input { width: 260px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
     .btn { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: var(--accent); color:#05202a; font-weight: 900; cursor:pointer; margin-top: 8px; }
     .hr { height:1px; background:var(--line); margin: 12px 0; border:0; }
     .outBig { font-size: 34px; font-weight: 950; margin: 8px 0 4px; }
@@ -24,7 +24,6 @@
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
     table { width:100%; border-collapse: collapse; }
     td { padding: 6px 0; border-bottom: 1px solid #1c2735; }
-    .warn { color:#ffd27d; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
   </style>
@@ -34,8 +33,8 @@
   <div class="wrap">
     <h1>SSD2R Tool — Runewords Planner</h1>
     <p class="sub">
-Pick a runeword and season phase → compute total Ist cost → estimate farming time via Keys Pipeline model.
-Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters in your model config.
+Pick a runeword + season phase → compute total Ist cost → estimate farming hours via Keys Pipeline model.
+Rule: any rune not listed in the price table is treated as 0 Ist (common/free).
     </p>
 
     <div class="grid">
@@ -52,6 +51,18 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
         </div>
 
         <div class="row">
+          <label>Search</label>
+          <input id="q" placeholder="e.g. infi / hoto / enigma" />
+        </div>
+
+        <div class="row">
+          <label>Tag</label>
+          <select id="tag">
+            <option value="all">All</option>
+          </select>
+        </div>
+
+        <div class="row">
           <label>Runeword</label>
           <select id="rw"></select>
         </div>
@@ -62,8 +73,6 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
           <a href="../index.html">← Back to home</a> &nbsp;|&nbsp;
           <a href="./model.html">Key Pipeline Model</a>
         </p>
-
-        <div class="tiny warn" id="warn"></div>
       </div>
 
       <div class="card">
@@ -91,7 +100,7 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
   </div>
 
   <script type="module">
-    import { loadPriceTable, getRunePriceIst } from "../model/priceTable.js";
+    import { loadPriceTable } from "../model/priceTable.js";
     import { breakdownRuneword } from "../model/runewordsPlanner.js";
     import { computeFromIst } from "../model/keysPipeline.js";
 
@@ -100,9 +109,10 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
 
     const els = {
       phase: el("phase"),
+      q: el("q"),
+      tag: el("tag"),
       rw: el("rw"),
       calc: el("calc"),
-      warn: el("warn"),
 
       costIst: el("costIst"),
       hours: el("hours"),
@@ -115,7 +125,7 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
     };
 
     let priceTable = null;
-    let runewords = null;
+    let runewordsData = null;
     let modelDefaults = null;
 
     async function loadRunewords() {
@@ -137,26 +147,68 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
       els.phase.value = ["1","2","3"].includes(def) ? def : "2";
     }
 
+    function populateTagOptions() {
+      els.tag.innerHTML = "";
+      const optAll = document.createElement("option");
+      optAll.value = "all";
+      optAll.textContent = "All";
+      els.tag.appendChild(optAll);
+
+      for (const t of (runewordsData.tags || [])) {
+        const opt = document.createElement("option");
+        opt.value = t;
+        opt.textContent = t;
+        els.tag.appendChild(opt);
+      }
+    }
+
     function renderRunewordOptions() {
+      const query = (els.q.value || "").trim().toLowerCase();
+      const tag = els.tag.value || "all";
+
+      const list = (runewordsData.runewords || []).filter(r => {
+        const tags = Array.isArray(r.tags) ? r.tags : [];
+        const okTag = (tag === "all") || tags.includes(tag);
+        if (!okTag) return false;
+
+        if (!query) return true;
+        const hay = `${r.name} ${r.id} ${tags.join(" ")}`.toLowerCase();
+        return hay.includes(query);
+      });
+
+      const prev = els.rw.value;
       els.rw.innerHTML = "";
-      for (const r of runewords.runewords) {
+
+      for (const r of list) {
         const opt = document.createElement("option");
         opt.value = r.id;
         opt.textContent = r.name;
+        els.rw.appendChild(opt);
+      }
+
+      // keep previous selection if possible
+      const stillThere = Array.from(els.rw.options).some(o => o.value === prev);
+      if (stillThere) els.rw.value = prev;
+
+      // if no options, clear selection
+      if (!els.rw.options.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "(no match)";
         els.rw.appendChild(opt);
       }
     }
 
     function getSelectedRuneword() {
       const id = els.rw.value;
-      return runewords.runewords.find(x => x.id === id);
+      return (runewordsData.runewords || []).find(x => x.id === id);
     }
 
     function renderBreakdown(rw, phase) {
       const b = breakdownRuneword({ priceTable, phase, runes: rw.runes });
 
       els.baseLine.textContent =
-        `Base: ${rw.base || "—"} | Notes: ${rw.notes || "—"}`;
+        `Base: ${rw.base || "—"} | Tags: ${(rw.tags || []).join(", ") || "—"} | Notes: ${rw.notes || "—"}`;
 
       els.tbl.innerHTML = "";
 
@@ -169,7 +221,7 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
         const td2 = document.createElement("td");
         td2.className = "mono";
         td2.style.textAlign = "right";
-        td2.textContent = fmt(row.priceIst, 4);
+        td2.textContent = fmt(row.priceIst, 4); // always number; missing => 0
 
         tr.appendChild(td1);
         tr.appendChild(td2);
@@ -192,8 +244,6 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
     }
 
     function calc() {
-      els.warn.textContent = "";
-
       const phase = els.phase.value;
       localStorage.setItem("seasonPhase", phase);
 
@@ -203,7 +253,6 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
       const b = renderBreakdown(rw, phase);
       els.costIst.textContent = fmt(b.totalIst, 2);
 
-      // Feed Y into pipeline model
       const Y = b.totalIst;
 
       const out = computeFromIst({
@@ -217,7 +266,7 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
         extras: modelDefaults.extras
       });
 
-      // Use the expected hours from computeFromIst (continuous estimate)
+      // hours = cost / rate
       els.hours.textContent = fmt((out.istPerHour > 0) ? (Y / out.istPerHour) : NaN, 2);
 
       els.runs.textContent =
@@ -227,20 +276,24 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
         `Pipeline rate ≈ ${fmt(out.istPerHour, 3)} Ist/h (includes Countess extras)`;
 
       els.notes.textContent =
-        `Phase ${phase} prices. Any rune not listed in the price table is treated as 0 Ist (common/free).`;
+        `Phase ${phase} prices. Missing rune prices are treated as 0 Ist (common/free).`;
     }
 
     // init
     priceTable = await loadPriceTable();
-    runewords = await loadRunewords();
+    runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
 
-    renderRunewordOptions();
+    populateTagOptions();
     setPhaseDefault();
+    renderRunewordOptions();
 
     els.calc.addEventListener("click", calc);
     els.phase.addEventListener("change", calc);
     els.rw.addEventListener("change", calc);
+
+    els.q.addEventListener("input", () => { renderRunewordOptions(); calc(); });
+    els.tag.addEventListener("change", () => { renderRunewordOptions(); calc(); });
 
     calc();
   </script>
