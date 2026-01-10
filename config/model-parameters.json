@@ -6,8 +6,8 @@
     "Dn": 0.0952380952,
 
     "tC_min": 2.5,
-    "tS_min": 2,
-    "tN_min": 2,
+    "tS_min": 2.0,
+    "tN_min": 2.0,
 
     "extras": [
       { "name": "FGs", "priceIst": 0.011, "dropPerRun": 0.0809523810 },
