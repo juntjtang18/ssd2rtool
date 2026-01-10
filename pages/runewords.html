@@ -54,7 +54,9 @@
     <h1>SSD2R Tool — Runewords Planner</h1>
     <div class="sub">Pick a runeword + season phase → get a farming plan.</div>
 
+    <!-- Top row -->
     <div class="grid">
+      <!-- Inputs -->
       <div class="card">
         <h2>Inputs</h2>
 
@@ -85,6 +87,7 @@
         </div>
       </div>
 
+      <!-- Planner -->
       <div class="card">
         <h2>Planner</h2>
 
@@ -103,14 +106,9 @@
       </div>
     </div>
 
+    <!-- Bottom row: ✅ swapped -->
     <div class="grid" style="margin-top:14px;">
-      <div class="card">
-        <h2>Predicted drops</h2>
-        <div class="box">
-          <table class="mono" id="dropsTable"></table>
-        </div>
-      </div>
-
+      <!-- Rune cost on LEFT -->
       <div class="card">
         <h2>Rune cost</h2>
         <div class="bigNumber" style="font-size:34px;">
@@ -118,6 +116,14 @@
         </div>
         <div class="divider"></div>
         <table class="mono" id="breakdownTable"></table>
+      </div>
+
+      <!-- Predicted drops on RIGHT -->
+      <div class="card">
+        <h2>Predicted drops</h2>
+        <div class="box">
+          <table class="mono" id="dropsTable"></table>
+        </div>
       </div>
     </div>
   </div>
@@ -128,10 +134,15 @@
     import { planRotationToTargetIst } from "../model/keysPipeline.js";
 
     const el = (id) => document.getElementById(id);
-    const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
 
-    // Display-only buffer: ONLY applied to the big total hours number
+    // display-only buffer: ONLY applied to big total hours
     const DISPLAY_BUFFER = 1.10;
+
+    // ✅ formatting rules for UX
+    const fmtHours = (x) => (Number.isFinite(x) ? x.toFixed(1) : "—");     // 1 decimal
+    const fmtIst1  = (x) => (Number.isFinite(x) ? x.toFixed(1) : "—");     // 1 decimal
+    const fmtIst0  = (x) => (Number.isFinite(x) ? x.toFixed(0) : "—");     // integer
+    const asInt    = (x) => String(Math.max(0, Math.round(Number(x || 0)))); // integer count
 
     const els = {
       phase: el("phase"),
@@ -208,7 +219,7 @@
     function renderRuneCost(rw, phase) {
       const b = breakdownRuneword({ priceTable, phase, runes: rw.runes });
 
-      els.totalCost.textContent = fmt(b.totalIst, 2);
+      els.totalCost.textContent = fmtIst1(b.totalIst);
 
       els.breakdownTable.innerHTML = "";
       for (const row of b.rows) {
@@ -218,7 +229,8 @@
 
         const td2 = document.createElement("td");
         td2.style.textAlign = "right";
-        td2.textContent = fmt(row.priceIst, 4);
+        // ✅ simpler: integer ist per rune line
+        td2.textContent = fmtIst0(row.priceIst);
 
         tr.appendChild(td1);
         tr.appendChild(td2);
@@ -230,7 +242,7 @@
       td1.textContent = "Total";
       const td2 = document.createElement("td");
       td2.style.textAlign = "right";
-      td2.textContent = fmt(b.totalIst, 4);
+      td2.textContent = fmtIst1(b.totalIst);
       tr.appendChild(td1);
       tr.appendChild(td2);
       els.breakdownTable.appendChild(tr);
@@ -239,10 +251,10 @@
     }
 
     function renderPlan(plan) {
-      // Only apply buffer to big number
-      els.totalHours.textContent = fmt(plan.hours.total * DISPLAY_BUFFER, 2);
+      // ✅ only buffer the big number
+      els.totalHours.textContent = fmtHours(plan.hours.total * DISPLAY_BUFFER);
 
-      // Everything else is base plan
+      // base plan (no buffer)
       els.planGrid.innerHTML = "";
       const add = (txt, cls="") => {
         const d = document.createElement("div");
@@ -256,18 +268,17 @@
       add("Runs", "planHdr right");
 
       add("Hell Countess", "planBoss");
-      add(fmt(plan.hours.countess, 2), "right");
+      add(fmtHours(plan.hours.countess), "right");
       add(String(plan.runs.countess), "right");
 
       add("Hell Summoner", "planBoss");
-      add(fmt(plan.hours.summoner, 2), "right");
+      add(fmtHours(plan.hours.summoner), "right");
       add(String(plan.runs.summoner), "right");
 
       add("Hell Nihlathak", "planBoss");
-      add(fmt(plan.hours.nihl, 2), "right");
+      add(fmtHours(plan.hours.nihl), "right");
       add(String(plan.runs.nihl), "right");
 
-      // ✅ Only show keysets
       els.targetLine.textContent = `Stop at: ${plan.keys.keysets} keysets`;
     }
 
@@ -286,7 +297,8 @@
 
         const right = document.createElement("div");
         right.style.textAlign = "right";
-        right.textContent = `${r.ist} Ist`;
+        // ✅ show as integer Ist
+        right.textContent = `${Math.round(Number(r.ist || 0))} Ist`;
 
         els.tradeList.appendChild(left);
         els.tradeList.appendChild(right);
@@ -319,21 +331,23 @@
       els.dropsTable.appendChild(tr("Keysets", String(plan.keys.keysets), "k"));
 
       for (const x of extras) {
-        els.dropsTable.appendChild(tr(x.name, `~${x.pcs}`));
+        els.dropsTable.appendChild(tr(x.name, asInt(x.pcs)));
       }
 
-      if (bonus.length) {
+      // Only show bonus rows if any >=1
+      const bonusNonZero = bonus.filter(b => Math.round(Number(b.pcs || 0)) >= 1);
+      if (bonusNonZero.length) {
         els.dropsTable.appendChild(tr("", ""));
         els.dropsTable.appendChild(tr("Possible Bonus (Not Guaranteed)", "", "muted"));
-        for (const b of bonus) {
-          els.dropsTable.appendChild(tr(b.name, `~${b.pcs}`));
+        for (const b of bonusNonZero) {
+          els.dropsTable.appendChild(tr(b.name, asInt(b.pcs)));
         }
       }
     }
 
     function renderZeroState() {
-      // Clear planner
-      els.totalHours.textContent = fmt(0, 2);
+      // total cost already rendered by rune breakdown; here we zero the plan
+      els.totalHours.textContent = fmtHours(0);
 
       els.planGrid.innerHTML = "";
       const add = (txt, cls="") => {
@@ -348,21 +362,21 @@
       add("Runs", "planHdr right");
 
       add("Hell Countess", "planBoss");
-      add(fmt(0, 2), "right");
+      add(fmtHours(0), "right");
       add("0", "right");
 
       add("Hell Summoner", "planBoss");
-      add(fmt(0, 2), "right");
+      add(fmtHours(0), "right");
       add("0", "right");
 
       add("Hell Nihlathak", "planBoss");
-      add(fmt(0, 2), "right");
+      add(fmtHours(0), "right");
       add("0", "right");
 
       els.targetLine.textContent = `Stop at: 0 keysets`;
 
-      // Clear trade list & drops
       els.tradeList.textContent = "—";
+
       els.dropsTable.innerHTML = "";
       const row = document.createElement("tr");
       const td1 = document.createElement("td");
@@ -386,13 +400,12 @@
       const b = renderRuneCost(rw, phase);
       const costIst = Number(b.totalIst || 0);
 
-      // ✅ cost=0 => show 0 hours everywhere
+      // ✅ cost=0 => show 0 plan
       if (!(costIst > 0)) {
         renderZeroState();
         return;
       }
 
-      // Model must NOT see display buffer
       const plan = planRotationToTargetIst({
         targetIst: costIst,
         phase,
