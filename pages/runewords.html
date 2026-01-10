@@ -203,15 +203,6 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
       const b = renderBreakdown(rw, phase);
       els.costIst.textContent = fmt(b.totalIst, 2);
 
-      if (b.missing.length) {
-        els.warn.textContent = `Missing prices for: ${b.missing.join(", ")}. Add them into rune-price-table.json to get accurate cost.`;
-        els.hours.textContent = "—";
-        els.runs.textContent = "Runs: —";
-        els.rate.textContent = "—";
-        els.notes.textContent = "—";
-        return;
-      }
-
       // Feed Y into pipeline model
       const Y = b.totalIst;
 
@@ -236,7 +227,7 @@ Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters 
         `Pipeline rate ≈ ${fmt(out.istPerHour, 3)} Ist/h (includes Countess extras)`;
 
       els.notes.textContent =
-        `Phase ${phase} prices. If you want “integer keyset plan”, we can add a toggle next.`;
+        `Phase ${phase} prices. Any rune not listed in the price table is treated as 0 Ist (common/free).`;
     }
 
     // init
