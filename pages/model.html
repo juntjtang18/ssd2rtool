@@ -41,12 +41,13 @@
     <p class="sub">
 Two calculators using the same centralized parameters:
 (1) Target Ist → required hours + runs (C/S/N)  [closed-form model]
-(2) Target hours → earned Ist + runs (C/S/N)   [discrete simulation, Policy A routing]
+(2) Target hours → earned value + runs (C/S/N)  [deterministic rotation planner]
 
-Notes:
-- Inputs for Target Ist / Hours are integers (step=1).
-- Hours input has minimum 3 (shorter sessions are too noisy).
-- Simulation values are expected value (EV). Real results vary.
+Hours-mode planner rule:
+- Rotate C → S → N
+- Each “full key” costs expected time: (1/p) runs × (min/run)
+- When remaining time can’t afford the next full key, spend it on the next boss only:
+  that boss gets ONE fractional key progress (so only one of T/H/D can be decimal).
     </p>
 
     <!-- Shared Parameters -->
@@ -130,7 +131,7 @@ Notes:
       </div>
     </div>
 
-    <div class="sectionTitle">2) Target hours → earned Ist + runs (Simulation, Policy A)</div>
+    <div class="sectionTitle">2) Target hours → earned value + runs (Deterministic rotation)</div>
     <div class="grid">
       <div class="card">
         <h2>Input</h2>
@@ -140,24 +141,25 @@ Notes:
           <input id="H" type="number" step="1" min="3" value="20">
         </div>
 
-        <button class="btn" id="calcHours">Simulate</button>
+        <button class="btn" id="calcHours">Calculate</button>
 
         <p class="tiny">
-          Policy A routing: always farm the key type you have the least of; if tied, pick the most profitable node (usually Countess due to extras).
-          Keys are valued as banked value (1 key = 1/3 Ist).
+          Keys are valued as banked progress (1 key = 1/3 Ist).
+          Extras are Countess-only EV from config (including your “bonus” lines if included as extras).
         </p>
       </div>
 
       <div class="card">
         <h2>Output</h2>
 
-        <div class="tiny">Expected total value (banked)</div>
+        <div class="tiny">Predicted total value (banked)</div>
         <div class="outBig"><span id="earnIst">—</span> <span class="tiny">Ist</span></div>
 
         <hr class="hr"/>
 
         <div class="tiny mono" id="earnKeys">—</div>
         <div class="tiny mono" id="earnRuns">Runs: —</div>
+        <div class="tiny mono" id="earnTail">Tail: —</div>
         <div class="tiny mono" id="earnBreakdown">—</div>
         <div class="tiny mono" id="earnRate">—</div>
 
@@ -169,7 +171,7 @@ Notes:
 
   <script type="module">
     import { computeFromIst } from "../model/keysPipeline.js";
-    import { simulateBankedKeyValue } from "../model/keysPipelineSim.js";
+    import { planFromHoursDeterministic } from "../model/keysPipelineDeterministic.js";
 
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
@@ -198,6 +200,7 @@ Notes:
       earnIst: el("earnIst"),
       earnKeys: el("earnKeys"),
       earnRuns: el("earnRuns"),
+      earnTail: el("earnTail"),
       earnBreakdown: el("earnBreakdown"),
       earnRate: el("earnRate"),
       earnWarn: el("earnWarn"),
@@ -259,8 +262,7 @@ Notes:
 
         els.extrasNote.textContent =
           `Extras (Countess-only) loaded: ${(defaults.extras||[]).length} items. ` +
-          `VextraC ≈ ${fmt(VextraC, 4)} Ist/run(C) = regular ${fmt(VregularC,4)} + bonus ${fmt(VbonusC,4)}. ` +
-          (VextraC <= 0 ? "⚠ Extras are OFF (dropPerRun=0)." : "Extras are ACTIVE.");
+          `VextraC ≈ ${fmt(VextraC, 4)} Ist/run(C) = regular ${fmt(VregularC,4)} + bonus ${fmt(VbonusC,4)}.`;
 
         els.cfgStatus.textContent = "loaded";
       } catch (e) {
@@ -325,35 +327,36 @@ Notes:
       const H = clampIntInput(els.H, 3);
       const p = baseParams();
 
-      // Simulation: Policy A routing inside the simulator
-      const sim = simulateBankedKeyValue({
+      const out = planFromHoursDeterministic({
         hours: H,
         Dc: p.Dc, Ds: p.Ds, Dn: p.Dn,
         tC_min: p.tC_min, tS_min: p.tS_min, tN_min: p.tN_min,
         extras: p.extras,
-        keyIst: 1 / 3,
-        trials: 20000,
-        seed: 12345
+        keyIst: 1/3,
+        startBoss: "C"
       });
 
-      const a = sim.avg;
+      els.earnIst.textContent = fmt(out.totalIst, 2);
 
-      els.earnIst.textContent = fmt(a.totalIst, 2);
-
+      // Keys: two are integers, one MAY be fractional due to tail
       els.earnKeys.textContent =
-        `Keys (EV): T≈${fmt(a.T, 2)} | H≈${fmt(a.H, 2)} | D≈${fmt(a.D, 2)}  (total≈${fmt(a.keys, 2)})`;
+        `Keys: T=${fmt(out.keys.T, 2)} | H=${fmt(out.keys.H, 2)} | D=${fmt(out.keys.D, 2)} ` +
+        `(total=${fmt(out.keys.T + out.keys.H + out.keys.D, 2)})`;
 
       els.earnRuns.textContent =
-        `Runs (EV): Rc≈${fmt(a.runsC, 0)} | Rs≈${fmt(a.runsS, 0)} | Rn≈${fmt(a.runsN, 0)}`;
+        `Runs (expected): Rc≈${fmt(out.runs.runsC, 1)} | Rs≈${fmt(out.runs.runsS, 1)} | Rn≈${fmt(out.runs.runsN, 1)}`;
+
+      els.earnTail.textContent =
+        `Tail: boss=${out.tail?.boss || "—"} | fractionalKey≈${fmt(out.tail?.fracKey ?? NaN, 3)} | tailRuns≈${fmt(out.tail?.runs ?? NaN, 2)}`;
 
       els.earnBreakdown.textContent =
-        `Value: banked keys≈${fmt(a.keyIst, 2)} Ist + extras≈${fmt(a.extrasIst, 2)} Ist  (VextraC≈${fmt(sim.VextraC, 4)} Ist/runC)`;
+        `Value: banked keys=${fmt(out.bankedKeyIst, 2)} Ist + extras=${fmt(out.extrasIst, 2)} Ist (VextraC≈${fmt(out.VextraC, 4)} Ist/runC)`;
 
       els.earnRate.textContent =
-        `Predicted revenue/hour ≈ ${fmt(a.istPerHour, 3)} Ist/h (EV over H=${H}h)`;
+        `Predicted revenue/hour ≈ ${fmt(out.istPerHour, 3)} Ist/h`;
 
       els.earnWarn.textContent =
-        `Note: EV only. Variance is high. Keys are valued as banked progress (1 key = 1/3 Ist).`;
+        `Deterministic rotation planner (expected-time). One fractional key can appear only in tail.`;
     }
 
     await loadDefaults();
