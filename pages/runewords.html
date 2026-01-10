@@ -25,15 +25,21 @@
     a:hover { text-decoration: underline; }
 
     /* Planner emphasis */
-    .sectionTitle { font-size: 13px; color: var(--muted); font-weight: 700; margin-top: 2px; }
-    .bigNumber { font-size: 40px; font-weight: 950; margin: 6px 0 2px; line-height: 1.0; }
-    .bigUnit { font-size: 13px; color: var(--muted); font-weight: 700; margin-left: 6px; }
+    .bigNumber { font-size: 44px; font-weight: 950; margin: 6px 0 2px; line-height: 1.0; }
+    .bigUnit { font-size: 13px; color: var(--muted); font-weight: 800; margin-left: 6px; }
     .planBox { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background:#0f1318; }
-    .planLine { font-size: 14px; line-height: 1.65; }
-    .planKey { color: var(--accent); font-weight: 900; }
-    .tradeGrid { display:grid; grid-template-columns: 1fr 120px; gap: 6px 12px; margin-top: 10px; }
-    .tradeGrid div { padding: 2px 0; }
+    .planGrid { display:grid; grid-template-columns: 1fr 110px 110px; gap: 8px 10px; align-items:center; }
+    .planHdr { color: var(--muted); font-weight: 800; font-size: 12px; }
+    .planBoss { color: var(--accent); font-weight: 950; font-size: 14px; }
+    .planCell { font-size: 14px; }
     .right { text-align:right; }
+    .stopLine { margin-top: 10px; font-size: 14px; font-weight: 850; }
+
+    /* Trade list */
+    .tradeGrid { display:grid; grid-template-columns: 1fr 160px; gap: 6px 12px; margin-top: 8px; }
+    .tradeGrid div { padding: 2px 0; }
+    .tradeKey { color: var(--accent); font-weight: 900; }
+
     table { width:100%; border-collapse: collapse; }
     td { padding: 6px 0; border-bottom: 1px solid #1c2735; }
   </style>
@@ -83,36 +89,34 @@
         </p>
       </div>
 
-      <!-- Planner Output -->
+      <!-- Planner Output (NO cost here) -->
       <div class="card">
-        <h2>Planner</h2>
+        <h2>Farming Plan</h2>
 
-        <!-- Cost block -->
-        <div class="sectionTitle">Cost</div>
-        <div class="bigNumber"><span id="costIst">—</span><span class="bigUnit">Ist</span></div>
-
-        <hr class="hr"/>
-
-        <!-- Farming plan block -->
-        <div class="sectionTitle">Farming Plan</div>
+        <div class="tiny">Total time</div>
         <div class="bigNumber"><span id="totalHours">—</span><span class="bigUnit">Hours</span></div>
 
         <div class="planBox" style="margin-top:10px;">
-          <div class="planLine" id="planLines">—</div>
-          <div class="planLine" id="targetKeys" style="margin-top:8px;">—</div>
+          <div class="planGrid mono" id="planGrid">
+            <!-- filled by JS -->
+          </div>
+          <div class="stopLine mono" id="targetKeys">—</div>
         </div>
 
         <div class="planBox" style="margin-top:12px;">
-          <div class="sectionTitle" style="margin:0 0 6px;">Trade list (extras)</div>
+          <div class="tiny" style="font-weight:900; color:var(--muted); margin-bottom:6px;">Trade list (extras)</div>
           <div class="tradeGrid mono" id="tradeList">—</div>
         </div>
       </div>
 
-      <!-- Rune breakdown -->
+      <!-- Rune breakdown (Cost lives here) -->
       <div class="card" style="grid-column: 1 / -1;">
         <h2>Rune breakdown</h2>
         <div class="tiny mono" id="baseLine">—</div>
-        <table id="tbl"></table>
+        <div class="bigNumber" style="font-size:34px; margin-top:10px;">
+          <span id="totalCost">—</span><span class="bigUnit">Ist (Total Cost)</span>
+        </div>
+        <table id="tbl" style="margin-top:10px;"></table>
       </div>
     </div>
   </div>
@@ -132,17 +136,18 @@
       rw: el("rw"),
       calc: el("calc"),
 
-      costIst: el("costIst"),
       totalHours: el("totalHours"),
-      planLines: el("planLines"),
+      planGrid: el("planGrid"),
       targetKeys: el("targetKeys"),
       tradeList: el("tradeList"),
 
       baseLine: el("baseLine"),
+      totalCost: el("totalCost"),
       tbl: el("tbl"),
     };
 
-    const BUFFER = 1.10; // fixed +10% buffer for planner
+    // Fixed planner buffer (no UI option)
+    const BUFFER = 1.10;
 
     let priceTable = null;
     let runewordsData = null;
@@ -226,6 +231,8 @@
       els.baseLine.textContent =
         `Base: ${rw.base || "—"} | Tags: ${(rw.tags || []).join(", ") || "—"} | Notes: ${rw.notes || "—"}`;
 
+      els.totalCost.textContent = fmt(b.totalIst, 2);
+
       els.tbl.innerHTML = "";
 
       for (const row of b.rows) {
@@ -246,7 +253,7 @@
 
       const tr = document.createElement("tr");
       const td1 = document.createElement("td");
-      td1.textContent = "Total";
+      td1.textContent = "Total Cost";
       const td2 = document.createElement("td");
       td2.className = "mono";
       td2.style.textAlign = "right";
@@ -258,51 +265,172 @@
       return b;
     }
 
-    function renderTradeList({ RcPlan }) {
+    // ----- Batch helpers (no fractional Ist payouts) -----
+    function piecesPerIstFromPrice(priceIst) {
+      if (!Number.isFinite(priceIst) || priceIst <= 0) return Infinity;
+      return Math.max(1, Math.ceil(1 / priceIst));
+    }
+
+    function computeBatchableExtras({ RcTotal }) {
       const extras = Array.isArray(modelDefaults.extras) ? modelDefaults.extras : [];
-      if (!extras.length) {
+      const rows = [];
+
+      let bankableIst = 0;
+
+      for (const e of extras) {
+        const name = e.name ?? e.id ?? "Extra";
+        const priceIst = Number(e.priceIst ?? e.price ?? e.valueIst);
+        const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
+
+        if (!Number.isFinite(priceIst) || priceIst <= 0) continue;
+        if (!Number.isFinite(dpr) || dpr <= 0) continue;
+
+        const ppi = Number.isFinite(e.piecesPerIst) ? Number(e.piecesPerIst) : piecesPerIstFromPrice(priceIst);
+        if (!Number.isFinite(ppi) || ppi <= 0) continue;
+
+        // Use integer pieces for display & batching (conservative)
+        const pieces = Math.floor(RcTotal * dpr);
+        const batches = Math.floor(pieces / ppi); // each batch = 1 Ist
+        const rem = pieces - batches * ppi;
+
+        bankableIst += batches;
+
+        rows.push({
+          name,
+          pieces,
+          ppi,
+          batches,
+          rem,
+          dpr,
+          priceIst
+        });
+      }
+
+      // sort by realized Ist desc
+      rows.sort((a,b)=> b.batches - a.batches);
+
+      return { rows, bankableIst };
+    }
+
+    function runsNeededForNextBatch({ RcTotal, row }) {
+      // EV runs needed for this item to gain +1 more Ist batch
+      // (we use expected pieces, not floored pieces, for planning)
+      const ppi = row.ppi;
+      const dpr = row.dpr;
+      if (!Number.isFinite(ppi) || !Number.isFinite(dpr) || dpr <= 0) return Infinity;
+
+      const expectedPieces = RcTotal * dpr;
+      const currentBatches = Math.floor(expectedPieces / ppi);
+      const nextThreshold = (currentBatches + 1) * ppi;
+
+      const needPieces = nextThreshold - expectedPieces;
+      if (!(needPieces > 0)) return Infinity;
+
+      return needPieces / dpr;
+    }
+
+    function topUpCountessRunsToBankableTarget({ baseRc, keysetsTarget, costIst }) {
+      // We bank keys as integer keysets => keysetsTarget Ist
+      // We bank extras as integer Ist batches (no fractions)
+      // Target bankable total: ceil(costIst)
+      const targetBankable = Math.ceil(costIst);
+
+      let RcTotal = baseRc;
+      let iter = 0;
+
+      while (iter < 200) {
+        const { rows, bankableIst } = computeBatchableExtras({ RcTotal });
+        const bankableTotal = keysetsTarget + bankableIst;
+
+        if (bankableTotal >= targetBankable) {
+          return { RcTotal, rows, bankableIst, targetBankable };
+        }
+
+        // choose the fastest next +1 Ist batch by extra runs
+        let best = { addRuns: Infinity, row: null };
+
+        for (const r of rows) {
+          const addRunsEV = runsNeededForNextBatch({ RcTotal, row: r });
+          if (addRunsEV < best.addRuns) best = { addRuns: addRunsEV, row: r };
+        }
+
+        if (!Number.isFinite(best.addRuns) || best.addRuns === Infinity) {
+          return { RcTotal, rows, bankableIst, targetBankable };
+        }
+
+        // enforce integer runs (planner)
+        const addRunsInt = Math.max(1, Math.ceil(best.addRuns));
+        RcTotal += addRunsInt;
+        iter++;
+      }
+
+      const { rows, bankableIst } = computeBatchableExtras({ RcTotal });
+      return { RcTotal, rows, bankableIst, targetBankable };
+    }
+
+    function renderPlanGrid({ hC, hS, hN, Rc, Rs, Rn }) {
+      els.planGrid.innerHTML = "";
+
+      const add = (txt, cls="") => {
+        const d = document.createElement("div");
+        d.className = cls;
+        d.textContent = txt;
+        els.planGrid.appendChild(d);
+      };
+
+      add("", "planHdr");
+      add("Hours", "planHdr right");
+      add("Runs", "planHdr right");
+
+      add("Hell Countess", "planBoss");
+      add(fmt(hC, 2), "planCell right");
+      add(String(Rc), "planCell right");
+
+      add("Hell Summoner", "planBoss");
+      add(fmt(hS, 2), "planCell right");
+      add(String(Rs), "planCell right");
+
+      add("Hell Nihlathak", "planBoss");
+      add(fmt(hN, 2), "planCell right");
+      add(String(Rn), "planCell right");
+    }
+
+    function renderTradeList({ rows }) {
+      if (!rows || !rows.length) {
         els.tradeList.textContent = "—";
         return;
       }
 
-      // Each extra item assumed: { name, priceIst, dropPerRun }
-      // Expected value per runC: dropPerRun * priceIst
-      // Expected total units dropped in plan: RcPlan * dropPerRun
-      // Expected Ist from that extra: units * priceIst
-      const rows = extras.map(e => {
-        const name = e.name ?? e.id ?? "Extra";
-        const priceIst = Number(e.priceIst ?? e.price ?? e.valueIst);
-        const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
-        const units = (Number.isFinite(dpr) ? RcPlan * dpr : NaN);
-        const ist = (Number.isFinite(units) && Number.isFinite(priceIst) ? units * priceIst : NaN);
-        return { name, units, ist };
-      }).filter(r => Number.isFinite(r.ist) && r.ist > 0);
-
-      rows.sort((a,b)=> b.ist - a.ist);
-
-      // Render
       els.tradeList.innerHTML = "";
-      const totalExtrasIst = rows.reduce((s,r)=> s + r.ist, 0);
+
+      let totalBankable = 0;
 
       for (const r of rows) {
+        // show only meaningful lines
+        if (r.batches <= 0 && r.pieces <= 0) continue;
+
+        totalBankable += r.batches;
+
         const left = document.createElement("div");
-        left.textContent = `${r.name}  (≈${fmt(r.units, 1)} pcs)`;
+        left.innerHTML =
+          `<span class="tradeKey">${r.name}</span>  (${r.ppi}×${r.batches}${r.batches>0 ? "" : ""}` +
+          `${r.pieces>0 ? `, rem ${r.rem}` : ""})`;
 
         const right = document.createElement("div");
         right.className = "right";
-        right.textContent = `${fmt(r.ist, 2)} Ist`;
+        right.textContent = `${r.batches} Ist`;
 
         els.tradeList.appendChild(left);
         els.tradeList.appendChild(right);
       }
 
-      const sepL = document.createElement("div");
-      sepL.textContent = "Total extras";
-      const sepR = document.createElement("div");
-      sepR.className = "right";
-      sepR.textContent = `${fmt(totalExtrasIst, 2)} Ist`;
-      els.tradeList.appendChild(sepL);
-      els.tradeList.appendChild(sepR);
+      const l2 = document.createElement("div");
+      l2.textContent = "Total extras (bankable)";
+      const r2 = document.createElement("div");
+      r2.className = "right";
+      r2.textContent = `${totalBankable} Ist`;
+      els.tradeList.appendChild(l2);
+      els.tradeList.appendChild(r2);
     }
 
     function calc() {
@@ -313,12 +441,11 @@
       if (!rw) return;
 
       const b = renderBreakdown(rw, phase);
-      els.costIst.textContent = fmt(b.totalIst, 2);
+      const costIst = b.totalIst;
 
-      const Y = b.totalIst;
-
+      // Base pipeline outputs (EV)
       const out = computeFromIst({
-        Y,
+        Y: costIst,
         Dc: modelDefaults.Dc,
         Ds: modelDefaults.Ds,
         Dn: modelDefaults.Dn,
@@ -328,11 +455,26 @@
         extras: modelDefaults.extras
       });
 
-      // Buffered INTEGER runs (ceil)
-      const RcPlan = Math.ceil(out.Rc * BUFFER);
-      const RsPlan = Math.ceil(out.Rs * BUFFER);
-      const RnPlan = Math.ceil(out.Rn * BUFFER);
+      // Key target (banked as integer keysets)
+      const keysetsTarget = Math.ceil(out.X * BUFFER);
 
+      // Base runs from pipeline, buffered & integer
+      const baseRc = Math.ceil(out.Rc * BUFFER);
+      const baseRs = Math.ceil(out.Rs * BUFFER);
+      const baseRn = Math.ceil(out.Rn * BUFFER);
+
+      // Top-up Countess runs so extras can be sold in integer Ist batches
+      const topup = topUpCountessRunsToBankableTarget({
+        baseRc,
+        keysetsTarget,
+        costIst
+      });
+
+      const RcPlan = topup.RcTotal;
+      const RsPlan = baseRs;
+      const RnPlan = baseRn;
+
+      // Hours
       const hC = (RcPlan * modelDefaults.tC_min) / 60;
       const hS = (RsPlan * modelDefaults.tS_min) / 60;
       const hN = (RnPlan * modelDefaults.tN_min) / 60;
@@ -340,18 +482,15 @@
 
       els.totalHours.textContent = fmt(totalHoursPlan, 2);
 
-      // Bigger, planner-style lines (no explanations)
-      els.planLines.innerHTML =
-        `<span class="planKey">Hell Countess:</span>  ${fmt(hC, 2)} h  (${RcPlan} runs)\n` +
-        `<span class="planKey">Hell Summoner:</span>  ${fmt(hS, 2)} h  (${RsPlan} runs)\n` +
-        `<span class="planKey">Hell Nihlathak:</span> ${fmt(hN, 2)} h  (${RnPlan} runs)`;
+      renderPlanGrid({
+        hC, hS, hN,
+        Rc: RcPlan, Rs: RsPlan, Rn: RnPlan
+      });
 
-      const keysetsTarget = Math.ceil(out.X * BUFFER);
       els.targetKeys.textContent =
         `Stop at: ${keysetsTarget} TKey + ${keysetsTarget} HKey + ${keysetsTarget} DKey`;
 
-      // Trade list (extras) based on Countess plan runs
-      renderTradeList({ RcPlan });
+      renderTradeList({ rows: topup.rows });
     }
 
     // init
