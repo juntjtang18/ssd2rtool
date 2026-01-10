@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SSD2R Tool — Runewords Planner</title>
+  <style>
+    :root { --bg:#0b0d10; --card:#12161c; --text:#e7eef7; --muted:#9db0c6; --line:#223041; --accent:#7bdcff; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 22px 16px 40px; }
+    h1 { margin: 6px 0 8px; font-size: 22px; }
+    .sub { color:var(--muted); margin: 0 0 16px; line-height: 1.55; white-space: pre-line; }
+    .grid { display:grid; grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width: 980px){ .grid { grid-template-columns: 1fr 1fr; } }
+    .card { background:var(--card); border:1px solid var(--line); border-radius: 14px; padding: 14px; }
+    .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); font-weight: 700; }
+    .row { display:flex; gap:10px; align-items:center; margin: 10px 0; }
+    label { flex: 1; color:var(--muted); font-size: 13px; }
+    select, input { width: 220px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
+    .btn { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: var(--accent); color:#05202a; font-weight: 900; cursor:pointer; margin-top: 8px; }
+    .hr { height:1px; background:var(--line); margin: 12px 0; border:0; }
+    .outBig { font-size: 34px; font-weight: 950; margin: 8px 0 4px; }
+    .tiny { color:var(--muted); font-size: 12px; line-height: 1.55; white-space: pre-line; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    table { width:100%; border-collapse: collapse; }
+    td { padding: 6px 0; border-bottom: 1px solid #1c2735; }
+    .warn { color:#ffd27d; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>SSD2R Tool — Runewords Planner</h1>
+    <p class="sub">
+Pick a runeword and season phase → compute total Ist cost → estimate farming time via Keys Pipeline model.
+Keys value rule: 1 key = 1/3 Ist (banked). Extras come from Countess parameters in your model config.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Inputs</h2>
+
+        <div class="row">
+          <label>Season phase</label>
+          <select id="phase">
+            <option value="1">Phase 1</option>
+            <option value="2">Phase 2</option>
+            <option value="3">Phase 3</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label>Runeword</label>
+          <select id="rw"></select>
+        </div>
+
+        <button class="btn" id="calc">Calculate</button>
+
+        <p class="tiny">
+          <a href="../index.html">← Back to home</a> &nbsp;|&nbsp;
+          <a href="./model.html">Key Pipeline Model</a>
+        </p>
+
+        <div class="tiny warn" id="warn"></div>
+      </div>
+
+      <div class="card">
+        <h2>Outputs</h2>
+
+        <div class="tiny">Runeword cost (Ist)</div>
+        <div class="outBig"><span id="costIst">—</span> <span class="tiny">Ist</span></div>
+
+        <div class="tiny">Estimated hours (pipeline)</div>
+        <div class="outBig"><span id="hours">—</span> <span class="tiny">hours</span></div>
+
+        <hr class="hr"/>
+
+        <div class="tiny mono" id="runs">Runs: —</div>
+        <div class="tiny mono" id="rate">—</div>
+        <div class="tiny mono" id="notes">—</div>
+      </div>
+
+      <div class="card" style="grid-column: 1 / -1;">
+        <h2>Rune breakdown</h2>
+        <div class="tiny mono" id="baseLine">—</div>
+        <table id="tbl"></table>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { loadPriceTable, getRunePriceIst } from "../model/priceTable.js";
+    import { breakdownRuneword } from "../model/runewordsPlanner.js";
+    import { computeFromIst } from "../model/keysPipeline.js";
+
+    const el = (id) => document.getElementById(id);
+    const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
+
+    const els = {
+      phase: el("phase"),
+      rw: el("rw"),
+      calc: el("calc"),
+      warn: el("warn"),
+
+      costIst: el("costIst"),
+      hours: el("hours"),
+      runs: el("runs"),
+      rate: el("rate"),
+      notes: el("notes"),
+
+      baseLine: el("baseLine"),
+      tbl: el("tbl"),
+    };
+
+    let priceTable = null;
+    let runewords = null;
+    let modelDefaults = null;
+
+    async function loadRunewords() {
+      const res = await fetch("../config/runewords.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load runewords.json: HTTP ${res.status}`);
+      return await res.json();
+    }
+
+    async function loadModelDefaults() {
+      const res = await fetch("../config/model-parameters.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load model-parameters.json: HTTP ${res.status}`);
+      const json = await res.json();
+      return json.defaults;
+    }
+
+    function setPhaseDefault() {
+      const saved = localStorage.getItem("seasonPhase");
+      const def = saved || String(priceTable.defaultPhase || modelDefaults.seasonPhase || 2);
+      els.phase.value = ["1","2","3"].includes(def) ? def : "2";
+    }
+
+    function renderRunewordOptions() {
+      els.rw.innerHTML = "";
+      for (const r of runewords.runewords) {
+        const opt = document.createElement("option");
+        opt.value = r.id;
+        opt.textContent = r.name;
+        els.rw.appendChild(opt);
+      }
+    }
+
+    function getSelectedRuneword() {
+      const id = els.rw.value;
+      return runewords.runewords.find(x => x.id === id);
+    }
+
+    function renderBreakdown(rw, phase) {
+      const b = breakdownRuneword({ priceTable, phase, runes: rw.runes });
+
+      els.baseLine.textContent =
+        `Base: ${rw.base || "—"} | Notes: ${rw.notes || "—"}`;
+
+      els.tbl.innerHTML = "";
+
+      for (const row of b.rows) {
+        const tr = document.createElement("tr");
+        const td1 = document.createElement("td");
+        td1.className = "mono";
+        td1.textContent = row.rune;
+
+        const td2 = document.createElement("td");
+        td2.className = "mono";
+        td2.style.textAlign = "right";
+        td2.textContent = (row.priceIst == null) ? "N/A" : fmt(row.priceIst, 4);
+
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        els.tbl.appendChild(tr);
+      }
+
+      // total row
+      const tr = document.createElement("tr");
+      const td1 = document.createElement("td");
+      td1.textContent = "Total";
+      const td2 = document.createElement("td");
+      td2.className = "mono";
+      td2.style.textAlign = "right";
+      td2.textContent = fmt(b.totalIst, 4);
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      els.tbl.appendChild(tr);
+
+      return b;
+    }
+
+    function calc() {
+      els.warn.textContent = "";
+
+      const phase = els.phase.value;
+      localStorage.setItem("seasonPhase", phase);
+
+      const rw = getSelectedRuneword();
+      if (!rw) return;
+
+      const b = renderBreakdown(rw, phase);
+      els.costIst.textContent = fmt(b.totalIst, 2);
+
+      if (b.missing.length) {
+        els.warn.textContent = `Missing prices for: ${b.missing.join(", ")}. Add them into rune-price-table.json to get accurate cost.`;
+        els.hours.textContent = "—";
+        els.runs.textContent = "Runs: —";
+        els.rate.textContent = "—";
+        els.notes.textContent = "—";
+        return;
+      }
+
+      // Feed Y into pipeline model
+      const Y = b.totalIst;
+
+      const out = computeFromIst({
+        Y,
+        Dc: modelDefaults.Dc,
+        Ds: modelDefaults.Ds,
+        Dn: modelDefaults.Dn,
+        tC_min: modelDefaults.tC_min,
+        tS_min: modelDefaults.tS_min,
+        tN_min: modelDefaults.tN_min,
+        extras: modelDefaults.extras
+      });
+
+      // Use the expected hours from computeFromIst (continuous estimate)
+      els.hours.textContent = fmt(out.hours, 2);
+
+      els.runs.textContent =
+        `Runs (expected): Rc≈${fmt(out.Rc, 0)} | Rs≈${fmt(out.Rs, 0)} | Rn≈${fmt(out.Rn, 0)}`;
+
+      els.rate.textContent =
+        `Pipeline rate ≈ ${fmt(out.istPerHour, 3)} Ist/h (includes Countess extras)`;
+
+      els.notes.textContent =
+        `Phase ${phase} prices. If you want “integer keyset plan”, we can add a toggle next.`;
+    }
+
+    // init
+    priceTable = await loadPriceTable();
+    runewords = await loadRunewords();
+    modelDefaults = await loadModelDefaults();
+
+    renderRunewordOptions();
+    setPhaseDefault();
+
+    els.calc.addEventListener("click", calc);
+    els.phase.addEventListener("change", calc);
+    els.rw.addEventListener("change", calc);
+
+    calc();
+  </script>
+</body>
+</html>
