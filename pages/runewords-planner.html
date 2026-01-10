@@ -8,8 +8,14 @@
     :root { --bg:#0b0d10; --card:#12161c; --text:#e7eef7; --muted:#9db0c6; --line:#223041; --accent:#7bdcff; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
     .wrap { max-width: 1040px; margin: 0 auto; padding: 22px 16px 40px; }
+
+    .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
     h1 { margin: 6px 0 8px; font-size: 22px; }
     .sub { color:var(--muted); margin: 0 0 16px; line-height: 1.55; }
+
+    .langbox { display:flex; align-items:center; gap:8px; margin-top: 6px; }
+    .langbox .globe { font-size: 16px; opacity:.9; }
+    .langbox select { width: 140px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
 
     .grid { display:grid; grid-template-columns: 1fr; gap: 14px; }
     @media (min-width: 980px){ .grid { grid-template-columns: 1fr 1fr; } }
@@ -51,47 +57,60 @@
 
 <body>
   <div class="wrap">
-    <h1>SSD2R Tool — Runewords Planner</h1>
-    <div class="sub">Pick a runeword + season phase → get a farming plan.</div>
+    <div class="topbar">
+      <div>
+        <h1 data-i18n="title">SSD2R Tool — Runewords Planner</h1>
+        <div class="sub" data-i18n="subtitle">Pick a runeword + season phase → get a farming plan.</div>
+      </div>
+
+      <div class="langbox" title="Language">
+        <span class="globe">🌐</span>
+        <select id="langSel" aria-label="Language">
+          <option value="zh-Hant">繁體</option>
+          <option value="zh-Hans">简体</option>
+          <option value="en">EN</option>
+        </select>
+      </div>
+    </div>
 
     <!-- Top row -->
     <div class="grid">
       <!-- Inputs -->
       <div class="card">
-        <h2>Inputs</h2>
+        <h2 data-i18n="inputs.title">Inputs</h2>
 
         <div class="row">
-          <label>Season phase</label>
+          <label data-i18n="inputs.phase">Season phase</label>
           <select id="phase">
-            <option value="1">Phase 1</option>
-            <option value="2">Phase 2</option>
-            <option value="3">Phase 3</option>
+            <option value="1" data-i18n="phase.1">Phase 1</option>
+            <option value="2" data-i18n="phase.2">Phase 2</option>
+            <option value="3" data-i18n="phase.3">Phase 3</option>
           </select>
         </div>
 
         <div class="row">
-          <label>Search</label>
+          <label data-i18n="inputs.search">Search</label>
           <input id="q" placeholder="e.g. infi / hoto / enigma" />
         </div>
 
         <div class="row">
-          <label>Runeword</label>
+          <label data-i18n="inputs.runeword">Runeword</label>
           <select id="rw"></select>
         </div>
 
-        <button class="btn" id="calc">Calculate</button>
+        <button class="btn" id="calc" data-i18n="btn.calc">Calculate</button>
 
         <div class="tiny" style="margin-top:10px;">
-          <a href="../index.html">← Back</a> &nbsp;|&nbsp;
-          <a href="./model.html">Key Pipeline</a>
+          <a href="../index.html" data-i18n="nav.back">← Back</a> &nbsp;|&nbsp;
+          <a href="./model.html" data-i18n="nav.keyPipeline">Key Pipeline</a>
         </div>
       </div>
 
       <!-- Planner -->
       <div class="card">
-        <h2>Planner</h2>
+        <h2 data-i18n="planner.title">Planner</h2>
 
-        <div class="tiny">Total time</div>
+        <div class="tiny" data-i18n="planner.totalTime">Total time</div>
         <div class="bigNumber"><span id="totalHours">—</span><span class="bigUnit">Hours</span></div>
 
         <div class="box" style="margin-top:10px;">
@@ -100,7 +119,7 @@
         </div>
 
         <div class="box" style="margin-top:12px;">
-          <div class="tiny muted" style="font-weight:900;">Trade list (extras)</div>
+          <div class="tiny muted" style="font-weight:900;" data-i18n="planner.tradeList">Trade list (extras)</div>
           <div class="tradeGrid mono" id="tradeList">—</div>
         </div>
       </div>
@@ -110,7 +129,7 @@
     <div class="grid" style="margin-top:14px;">
       <!-- Rune cost on LEFT -->
       <div class="card">
-        <h2>Rune cost</h2>
+        <h2 data-i18n="cost.title">Rune cost</h2>
         <div class="bigNumber" style="font-size:34px;">
           <span id="totalCost">—</span><span class="bigUnit">Ist</span>
         </div>
@@ -120,7 +139,7 @@
 
       <!-- Predicted drops on RIGHT -->
       <div class="card">
-        <h2>Predicted drops</h2>
+        <h2 data-i18n="drops.title">Predicted drops</h2>
         <div class="box">
           <table class="mono" id="dropsTable"></table>
         </div>
@@ -133,6 +152,8 @@
     import { breakdownRuneword } from "../model/runewordsPlanner.js";
     import { planRotationToTargetIst } from "../model/keysPipeline.js";
 
+    import { detectLang, loadI18nJson, makeT, applyI18nToDom } from "../model/i18n.js";
+
     const el = (id) => document.getElementById(id);
 
     // display-only buffer: ONLY applied to big total hours
@@ -144,6 +165,8 @@
     const asInt    = (x) => String(Math.max(0, Math.round(Number(x || 0)))); // integer count
 
     const els = {
+      langSel: el("langSel"),
+
       phase: el("phase"),
       q: el("q"),
       rw: el("rw"),
@@ -163,6 +186,11 @@
     let runewordsData = null;
     let modelDefaults = null;
 
+    // i18n
+    let dict = null;
+    let currentLang = "en";
+    let t = (key, vars=null) => key; // placeholder until loaded
+
     async function loadRunewords() {
       const res = await fetch("../config/runewords.json", { cache: "no-store" });
       if (!res.ok) throw new Error(`Failed to load runewords.json: HTTP ${res.status}`);
@@ -174,6 +202,28 @@
       if (!res.ok) throw new Error(`Failed to load model-parameters.json: HTTP ${res.status}`);
       const json = await res.json();
       return json.defaults;
+    }
+
+    async function initI18n() {
+      dict = await loadI18nJson("../i18n/runewords-planner.json");
+      const lang = detectLang();
+      applyLang(lang, { rerender: false });
+    }
+
+    function applyLang(lang, { rerender = true } = {}) {
+      currentLang = lang;
+      localStorage.setItem("lang", lang);
+      t = makeT(dict, lang);
+
+      document.documentElement.lang = lang;
+      document.title = t("title");
+      applyI18nToDom(t);
+
+      // keep selector in sync
+      els.langSel.value = lang;
+
+      // refresh all dynamic UI using the selected language
+      if (rerender) calc();
     }
 
     function setPhaseDefault() {
@@ -196,7 +246,7 @@
       for (const r of list) {
         const opt = document.createElement("option");
         opt.value = r.id;
-        opt.textContent = r.name;
+        opt.textContent = r.name; // runeword name stays game-native
         els.rw.appendChild(opt);
       }
 
@@ -237,7 +287,7 @@
 
       const tr = document.createElement("tr");
       const td1 = document.createElement("td");
-      td1.textContent = "Total";
+      td1.textContent = t("total");
       const td2 = document.createElement("td");
       td2.style.textAlign = "right";
       td2.textContent = fmtIst1(b.totalIst);
@@ -261,22 +311,22 @@
       };
 
       add("", "planHdr");
-      add("Hours", "planHdr right");
-      add("Runs", "planHdr right");
+      add(t("col.hours"), "planHdr right");
+      add(t("col.runs"), "planHdr right");
 
-      add("Hell Countess", "planBoss");
+      add(t("boss.countess"), "planBoss");
       add(fmtHours(plan.hours.countess), "right");
       add(String(plan.runs.countess), "right");
 
-      add("Hell Summoner", "planBoss");
+      add(t("boss.summoner"), "planBoss");
       add(fmtHours(plan.hours.summoner), "right");
       add(String(plan.runs.summoner), "right");
 
-      add("Hell Nihlathak", "planBoss");
+      add(t("boss.nihil"), "planBoss");
       add(fmtHours(plan.hours.nihl), "right");
       add(String(plan.runs.nihl), "right");
 
-      els.targetLine.textContent = `Stop at: ${plan.keys.keysets} keysets`;
+      els.targetLine.textContent = t("planner.stopAt", { N: plan.keys.keysets });
     }
 
     function renderTradeList(plan) {
@@ -301,9 +351,8 @@
       }
     }
 
-    // ✅ New: show all drops defined in drop table with dropRate >= 5% (regular extras),
-    // regardless of price. Small drop rates are omitted.
-    // Bonus stays as "Possible Bonus" (shown if pcs >= 1).
+    // Show all drops defined in drop table with dropRate >= 5% (regular extras),
+    // regardless of price. Bonus shown as "Possible Bonus" (pcs>=1).
     function renderPredictedDrops(plan) {
       const extras = (plan.predictedDrops && Array.isArray(plan.predictedDrops.extras))
         ? plan.predictedDrops.extras
@@ -318,7 +367,9 @@
       const getRateFromDefaults = (name) => {
         const n = String(name || "").toUpperCase();
         const arr = Array.isArray(modelDefaults?.extras) ? modelDefaults.extras : [];
-        const found = arr.find(x => String(x.name || x.id || "").toUpperCase().replace(/^BONUS\s*/i,"") === n);
+        const found = arr.find(x =>
+          String(x.name || x.id || "").toUpperCase().replace(/^BONUS\s*/i,"") === n
+        );
         const dpr = Number(found?.dropPerRun ?? found?.D ?? found?.rate);
         return Number.isFinite(dpr) ? dpr : 0;
       };
@@ -355,17 +406,15 @@
       };
 
       // Always show keysets
-      els.dropsTable.appendChild(tr("Keysets", String(plan.keys.keysets), "k"));
+      els.dropsTable.appendChild(tr(t("drops.keysets"), String(plan.keys.keysets), "k"));
 
-      // Regular extras (>=5% drop rate)
       for (const x of extrasShown) {
         els.dropsTable.appendChild(tr(x.name, asInt(x.pcs)));
       }
 
-      // Bonus (Not guaranteed) — show only if pcs>=1
       if (bonusShown.length) {
         els.dropsTable.appendChild(tr("", ""));
-        els.dropsTable.appendChild(tr("Possible Bonus (Not Guaranteed)", "", "muted"));
+        els.dropsTable.appendChild(tr(t("drops.bonusTitle"), "", "muted"));
         for (const b of bonusShown) {
           els.dropsTable.appendChild(tr(b.name, asInt(b.pcs)));
         }
@@ -384,22 +433,22 @@
       };
 
       add("", "planHdr");
-      add("Hours", "planHdr right");
-      add("Runs", "planHdr right");
+      add(t("col.hours"), "planHdr right");
+      add(t("col.runs"), "planHdr right");
 
-      add("Hell Countess", "planBoss");
+      add(t("boss.countess"), "planBoss");
       add(fmtHours(0), "right");
       add("0", "right");
 
-      add("Hell Summoner", "planBoss");
+      add(t("boss.summoner"), "planBoss");
       add(fmtHours(0), "right");
       add("0", "right");
 
-      add("Hell Nihlathak", "planBoss");
+      add(t("boss.nihil"), "planBoss");
       add(fmtHours(0), "right");
       add("0", "right");
 
-      els.targetLine.textContent = `Stop at: 0 keysets`;
+      els.targetLine.textContent = t("planner.stopAt", { N: 0 });
 
       els.tradeList.textContent = "—";
 
@@ -408,7 +457,7 @@
         const row = document.createElement("tr");
         const td1 = document.createElement("td");
         td1.className = "k";
-        td1.textContent = "Keysets";
+        td1.textContent = t("drops.keysets");
         const td2 = document.createElement("td");
         td2.style.textAlign = "right";
         td2.textContent = "0";
@@ -448,12 +497,18 @@
     }
 
     // init
+    await initI18n();
+
     priceTable = await loadPriceTable();
     runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
 
     setPhaseDefault();
     renderRunewordOptions();
+
+    // lang selector
+    els.langSel.value = currentLang;
+    els.langSel.addEventListener("change", () => applyLang(els.langSel.value, { rerender: true }));
 
     els.calc.addEventListener("click", calc);
     els.phase.addEventListener("change", calc);
