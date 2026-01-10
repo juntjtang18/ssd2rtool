@@ -68,6 +68,7 @@ function splitExtras(extras) {
   return { regular, bonus };
 }
 
+
 export function computeTheoryFromHours(params) {
   const H = Number(params?.hours);
   if (!(H > 0)) throw new Error("hours must be > 0");
@@ -77,17 +78,44 @@ export function computeTheoryFromHours(params) {
   const phaseData = params?.phaseData ?? {};
   const extras = params?.extras ?? [];
 
-  // Expected minutes needed to produce 1 key of each type (i.e., 1 keyset) under balanced rotation
-  const minPerKeyset = (tC / Dc) + (tS / Ds) + (tN / Dn);
-  if (!(minPerKeyset > 0)) throw new Error("Invalid inputs: minPerKeyset <= 0 (check D and t).");
-
+  // --- Run scheduling (as requested) ---
+  // We run: Countess -> Summoner -> Nihl, repeating.
+  // The last run is fractional based on remaining time, so at most ONE of Rc/Rs/Rn is fractional.
   const totalMin = H * 60;
-  const keysets = totalMin / minPerKeyset;
+  const cycleMin = tC + tS + tN;
+  if (!(cycleMin > 0)) throw new Error("Invalid inputs: tC+tS+tN must be > 0");
 
-  // Expected runs for each boss (decimal)
-  const Rc = keysets / Dc;
-  const Rs = keysets / Ds;
-  const Rn = keysets / Dn;
+  const fullCycles = Math.floor(totalMin / cycleMin);
+  let remaining = totalMin - fullCycles * cycleMin;
+
+  let Rc = fullCycles, Rs = fullCycles, Rn = fullCycles;
+
+  // Add partial cycle in order C -> S -> N (only one can be fractional)
+  if (remaining > 1e-12) {
+    const fracC = Math.min(1, remaining / tC);
+    Rc += fracC;
+    remaining -= fracC * tC;
+
+    if (remaining > 1e-12) {
+      const fracS = Math.min(1, remaining / tS);
+      Rs += fracS;
+      remaining -= fracS * tS;
+
+      if (remaining > 1e-12) {
+        const fracN = Math.min(1, remaining / tN);
+        Rn += fracN;
+        remaining -= fracN * tN;
+      }
+    }
+  }
+
+  // Expected keys (decimal EV) from scheduled runs
+  const kT = Rc * Dc;
+  const kH = Rs * Ds;
+  const kD = Rn * Dn;
+
+  // Keysets sellable as balanced sets (theoretical EV): limited by the minimum of the 3 streams
+  const keysets = Math.min(kT, kH, kD);
 
   const { regular, bonus } = splitExtras(extras);
   const vRegularPerCRun = regular.reduce((acc, x) => acc + x.dropPerRun * priceInIst(x.name, phaseData), 0);
@@ -102,11 +130,16 @@ export function computeTheoryFromHours(params) {
 
   return {
     keysets,
+    keys: { terror: kT, hate: kH, destruction: kD },
     runs: { Rc, Rs, Rn },
     minutes: {
       totalMin,
-      minPerKeyset,
+      cycleMin,
+      fullCycles,
+      // time actually spent on Countess drives extras/bonus
       countessMin: Rc * tC,
+      // leftover after partial cycle (should be ~0)
+      unusedMin: Math.max(0, remaining),
     },
     values: {
       keysIst,
@@ -120,15 +153,10 @@ export function computeTheoryFromHours(params) {
       bonusPerHour: bonusIst / H,
       istPerHourInclBonus: totalIstInclBonus / H,
       keysetsPerHour: keysets / H,
-    },
-    perKeyset: {
-      min: minPerKeyset,
-      istExclBonus: totalIstExclBonus / keysets,
-      bonusIst: bonusIst / keysets,
-      countessRuns: Rc / keysets, // should equal 1/Dc
     }
   };
 }
+
 
 export function computeTheoryFromTargetIst(params) {
   const Y = Number(params?.targetIst);
