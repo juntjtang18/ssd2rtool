@@ -135,44 +135,87 @@
       ].join("");
     }
 
-    function renderFromHours(r, hours) {
+        function renderFromHours(r, hours) {
       const out = el("outHours");
       const s = r.schedule;
       const k = s.keys;
+
+      // Build predicted drops lists
+      const { extras } = getDefaults();
+      const Rc = s.runs.Rc;
+      const phase = currentPhaseData();
+
+      const regularDrops = [];
+      const bonusDrops = [];
+
+      for (const x of (extras ?? [])) {
+        const rawName = String(x?.name ?? "").trim();
+        const dpr = Number(x?.dropPerRun ?? 0);
+        if (!rawName || !(dpr > 0)) continue;
+
+        const isBonus = /^BONUS\b/i.test(rawName);
+        const name = isBonus ? rawName.replace(/^BONUS\s*/i, "").trim() : rawName;
+        const qty = Rc * dpr;
+
+        const item = { name, qty };
+        if (isBonus) bonusDrops.push(item);
+        else regularDrops.push(item);
+      }
+
+      const renderList = (items) => {
+        if (!items.length) return "<div class='sub'>(none)</div>";
+        return `<div class="mono" style="line-height:1.7">${items.map(it =>
+          `${it.name}: ${fmt(it.qty,2)}`
+        ).join("<br/>")}</div>`;
+      };
+
       out.innerHTML = `
-        <div><span class="big">${fmt(r.rates.istPerHourExclBonus,2)}</span><span class="unit">Ist/h</span></div>
-        <div class="sub">Exclude bonus. Bonus EV: ${fmt(r.rates.bonusPerHour,3)} Ist/h · Total incl. bonus: ${fmt(r.rates.istPerHourInclBonus,3)} Ist/h</div>
+        <div class="kv"><div class="k">Farming Time</div><div class="v">${fmt(hours,2)} hour</div></div>
+        <div class="kv"><div class="k">Predicted Revenue</div><div class="v"><span class="big">${fmt(r.rates.istPerHourExclBonus,2)}</span><span class="unit">Ist/hour</span></div></div>
+
         <div class="divider"></div>
-        <div class="mono">
-          Full key-cycles: ${s.fullCycles} (C+S+N each +1 key)<br/>
-          Tail: ${s.tail.length ? s.tail.map(x => `${x.boss}:${fmt(x.key,3)}${x.fractional ? "(frac)" : ""}`).join(" · ") : "none"}<br/><br/>
-          Keys (EV): T=${fmt(k.terror,3)} · H=${fmt(k.hate,3)} · D=${fmt(k.destruction,3)}<br/>
-          Key value: ${fmt(r.values.keyIst,2)} Ist (1 key = 1/3 Ist) · Keysets EV=min=${fmt(r.values.keysetsEV,3)}<br/>
-          Runs (EV): Rc=${fmt(s.runs.Rc,2)} · Rs=${fmt(s.runs.Rs,2)} · Rn=${fmt(s.runs.Rn,2)}<br/>
-          Countess runs (drives extras+bonus): ${fmt(s.runs.Rc,2)} · Countess time ${fmt(s.countessMin,2)} min<br/>
-          Extras (EV): ${fmt(r.values.extrasRegularIst,2)} Ist · Bonus (EV): ${fmt(r.values.bonusIst,2)} Ist<br/>
-          Total (EV excl bonus): <span class="ok">${fmt(r.values.totalIstExclBonus,2)} Ist</span> (in ${fmt(hours,2)}h)
+
+        <div class="kv"><div class="k">Total revenue</div><div class="v">${fmt(r.values.totalIstExclBonus,2)} Ist</div></div>
+        <div class="sub">Key: ${fmt(r.values.keyIst,2)} Ist, Extras: ${fmt(r.values.extrasRegularIst,2)} Ist</div>
+        <div class="sub">Bonus (Not guaranteed): ${fmt(r.values.bonusIst,2)} Ist</div>
+
+        <div class="divider"></div>
+
+        <div class="k" style="margin-bottom:6px">Drops</div>
+        <div class="mono" style="line-height:1.7">
+          ${fmt(k.terror,2)} TKey<br/>
+          ${fmt(k.hate,2)} HKey<br/>
+          ${fmt(k.destruction,2)} DKey
         </div>
+
+        <div class="divider"></div>
+
+        <div class="k" style="margin-bottom:6px">Predicted Extra Drops</div>
+        ${renderList(regularDrops)}
+
+        <div class="divider"></div>
+
+        <div class="k" style="margin-bottom:6px">Bonus Drops (EV)</div>
+        ${renderList(bonusDrops)}
       `;
     }
 
-    function renderTarget(result, targetIst) {
+        function renderTarget(result, targetIst) {
       const out = el("outTarget");
       const r = result.result;
-      const s = r.schedule;
-      const k = s.keys;
+      const hours = result.required.hours;
+
       out.innerHTML = `
-        <div class="kv"><div class="k">Required hours (EV, excl. bonus)</div><div class="v">${fmt(result.required.hours,2)} h</div></div>
+        <div class="kv"><div class="k">Target Ist (exclude bonus)</div><div class="v">${fmt(targetIst,2)} Ist</div></div>
+        <div class="kv"><div class="k">Required hours</div><div class="v">${fmt(hours,2)} hour</div></div>
+        <div class="kv"><div class="k">Predicted revenue</div><div class="v">${fmt(r.rates.istPerHourExclBonus,2)} Ist/hour</div></div>
+
         <div class="divider"></div>
-        <div class="mono">
-          Target=${fmt(targetIst,2)} Ist (exclude bonus)<br/><br/>
-          Keys (EV): T=${fmt(k.terror,3)} · H=${fmt(k.hate,3)} · D=${fmt(k.destruction,3)} → key value ${fmt(r.values.keyIst,2)} Ist<br/>
-          Extras (EV): ${fmt(r.values.extrasRegularIst,2)} Ist<br/>
-          Total (EV excl bonus): <span class="ok">${fmt(r.values.totalIstExclBonus,2)} Ist</span><br/>
-          Bonus (EV, not included): ${fmt(r.values.bonusIst,2)} Ist<br/>
-          Rate (at that point): ${fmt(r.rates.istPerHourExclBonus,3)} Ist/h (bonus EV ${fmt(r.rates.bonusPerHour,3)} Ist/h)
-        </div>
-        <div class="note">Target solving uses bisection over the same key-by-key rotation model.</div>
+
+        <div class="kv"><div class="k">Total revenue</div><div class="v">${fmt(r.values.totalIstExclBonus,2)} Ist</div></div>
+        <div class="sub">Key: ${fmt(r.values.keyIst,2)} Ist, Extras: ${fmt(r.values.extrasRegularIst,2)} Ist</div>
+        <div class="sub">Bonus (Not guaranteed): ${fmt(r.values.bonusIst,2)} Ist</div>
+        <div class="note">Target solving uses bisection over the same EV rotation model.</div>
       `;
     }
 
