@@ -4,7 +4,7 @@ import { getRunePriceIst, normRune } from "./priceTable.js";
 export function breakdownRuneword({ priceTable, phase, runes }) {
   const rows = runes.map((r) => {
     const R = normRune(r);
-    const v = getRunePriceIst(priceTable, phase, R); // always number (>=0)
+    const v = getRunePriceIst(priceTable, phase, R); // always number >= 0
     return { rune: R, priceIst: v };
   });
 
