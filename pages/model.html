@@ -7,7 +7,7 @@
   <title>D2R Model (Theory EV)</title>
   <style>
     :root{
-      --bg:#0b1220; --panel:#0f1b2e; --text:#e7eefc; --muted:#9db0d1;
+      --bg:#0b1220; --text:#e7eefc; --muted:#9db0d1;
       --accent:#65d2ff; --good:#8bffb1; --warn:#ffd38b; --bad:#ff8b8b;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
@@ -41,28 +41,30 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>D2R Keys Model (Theory EV) — based on /config + /model + /pages structure</h1>
+    <h1>D2R Keys Model (Theory EV) — key-by-key rotation, extras only from Countess</h1>
 
     <div class="card" style="margin-bottom:16px">
       <div class="row" style="grid-template-columns:1fr 1fr">
         <div>
           <label>Price phase</label>
           <select id="phaseSel"></select>
-          <div class="sub">Loaded from <span class="mono">/config/rune-price-table.json</span></div>
+          <div class="sub">/config/rune-price-table.json</div>
         </div>
         <div>
           <label>Model parameters</label>
-          <div class="sub mono">/config/model-parameters.json</div>
+          <div class="sub">/config/model-parameters.json</div>
           <div class="pillbar" id="quickStats"></div>
         </div>
       </div>
-      <div class="sub">Assumptions: 1 keyset = 1 Ist. Pure EV (no ceil, no floor-batch, no bankable).</div>
+      <div class="sub">
+        Key value: 1 key = 1/3 Ist. Bonus is shown separately (EV only).
+      </div>
       <div class="err" id="loadErr" style="display:none"></div>
     </div>
 
     <div class="row">
       <div class="card">
-        <h2>1) Target Ist → required hours + EV runs</h2>
+        <h2>1) Target Ist → required hours + EV drops</h2>
         <label>Target Ist (exclude bonus)</label>
         <input id="targetIst" type="number" min="0" step="0.1" value="45" />
         <button id="btnTarget">Calculate</button>
@@ -82,7 +84,6 @@
   </div>
 
   <script type="module">
-    // This file lives at /pages/model.html
     import { loadModelConfigs, getPhaseOptions, computeTheoryFromHours, computeTheoryFromTargetIst, priceInIst } from "../model/modelCore.js";
 
     const el = (id) => document.getElementById(id);
@@ -113,8 +114,10 @@
       const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras } = getDefaults();
       const pd = currentPhaseData();
 
-      const timePerKeyset = (tC_min/Dc) + (tS_min/Ds) + (tN_min/Dn);
-      const keysetsPerHour = 60 / timePerKeyset;
+      const timePerKeyC = (tC_min / Dc);
+      const timePerKeyS = (tS_min / Ds);
+      const timePerKeyN = (tN_min / Dn);
+      const cycleMin = timePerKeyC + timePerKeyS + timePerKeyN;
 
       const extraNames = [...new Set((extras ?? []).map(x => String(x?.name ?? "").replace(/^BONUS\s*/i,"").trim()).filter(Boolean))];
       const picks = ["RAL","HEL","TAL","PG","PA","FG","FA","IST","UM","MAL"].filter(x => (x in pd) || extraNames.includes(x));
@@ -127,38 +130,49 @@
         `<span class="pill">tC <strong>${fmt(tC_min,2)}</strong> min</span>`,
         `<span class="pill">tS <strong>${fmt(tS_min,2)}</strong> min</span>`,
         `<span class="pill">tN <strong>${fmt(tN_min,2)}</strong> min</span>`,
-        `<span class="pill">keysets/h <strong>${fmt(keysetsPerHour,3)}</strong></span>`,
+        `<span class="pill">cycle (1 key each) <strong>${fmt(cycleMin,2)}</strong> min</span>`,
         `<span class="pill"><span class="mono">${priceStr || "prices loaded"}</span></span>`,
       ].join("");
     }
 
-    function renderTarget(r) {
-      el("outTarget").innerHTML = `
-        <div class="kv"><div class="k">Required hours (EV, excl. bonus)</div><div class="v">${fmt(r.required.hours,2)} h</div></div>
-        <div class="kv"><div class="k">Required keysets (EV)</div><div class="v">${fmt(r.required.keysets,2)}</div></div>
-        <div class="kv"><div class="k">Runs (EV)</div><div class="v">Rc=${fmt(r.required.runs.Rc,2)} · Rs=${fmt(r.required.runs.Rs,2)} · Rn=${fmt(r.required.runs.Rn,2)}</div></div>
-        <div class="divider"></div>
-        <div class="mono">
-          keys=${fmt(r.values.keysIst,2)} Ist + extras=${fmt(r.values.extrasRegularIst,2)} Ist = <span class="ok">${fmt(r.values.totalIstExclBonus,2)} Ist</span><br/>
-          bonus (EV, not included) = ${fmt(r.values.bonusIst,2)} Ist<br/>
-          rate = <b>${fmt(r.rates.istPerHourExclBonus,3)} Ist/h</b> (bonus EV ${fmt(r.rates.bonusPerHour,3)} Ist/h)
-        </div>
-        <div class="note">Pure EV: no ceil, no floor-batch, no “bankable only” constraints.</div>
-      `;
-    }
-
-    function renderHours(r) {
-      el("outHours").innerHTML = `
+    function renderFromHours(r, hours) {
+      const out = el("outHours");
+      const s = r.schedule;
+      const k = s.keys;
+      out.innerHTML = `
         <div><span class="big">${fmt(r.rates.istPerHourExclBonus,2)}</span><span class="unit">Ist/h</span></div>
         <div class="sub">Exclude bonus. Bonus EV: ${fmt(r.rates.bonusPerHour,3)} Ist/h · Total incl. bonus: ${fmt(r.rates.istPerHourInclBonus,3)} Ist/h</div>
         <div class="divider"></div>
         <div class="mono">
-          keysets=${fmt(r.keysets,2)} (keys value ${fmt(r.values.keysIst,2)} Ist)<br/>
-          runs (EV) Rc=${fmt(r.runs.Rc,2)} · Rs=${fmt(r.runs.Rs,2)} · Rn=${fmt(r.runs.Rn,2)}<br/>
-          Countess time=${fmt(r.minutes.countessMin,2)} min (drives extras + bonus)<br/>
-          extras (EV)=${fmt(r.values.extrasRegularIst,2)} Ist · bonus (EV)=${fmt(r.values.bonusIst,2)} Ist<br/>
-          total (EV excl bonus)=<span class="ok">${fmt(r.values.totalIstExclBonus,2)} Ist</span>
+          Full key-cycles: ${s.fullCycles} (C+S+N each +1 key)<br/>
+          Tail: ${s.tail.length ? s.tail.map(x => `${x.boss}:${fmt(x.key,3)}${x.fractional ? "(frac)" : ""}`).join(" · ") : "none"}<br/><br/>
+          Keys (EV): T=${fmt(k.terror,3)} · H=${fmt(k.hate,3)} · D=${fmt(k.destruction,3)}<br/>
+          Key value: ${fmt(r.values.keyIst,2)} Ist (1 key = 1/3 Ist) · Keysets EV=min=${fmt(r.values.keysetsEV,3)}<br/>
+          Runs (EV): Rc=${fmt(s.runs.Rc,2)} · Rs=${fmt(s.runs.Rs,2)} · Rn=${fmt(s.runs.Rn,2)}<br/>
+          Countess runs (drives extras+bonus): ${fmt(s.runs.Rc,2)} · Countess time ${fmt(s.countessMin,2)} min<br/>
+          Extras (EV): ${fmt(r.values.extrasRegularIst,2)} Ist · Bonus (EV): ${fmt(r.values.bonusIst,2)} Ist<br/>
+          Total (EV excl bonus): <span class="ok">${fmt(r.values.totalIstExclBonus,2)} Ist</span> (in ${fmt(hours,2)}h)
         </div>
+      `;
+    }
+
+    function renderTarget(result, targetIst) {
+      const out = el("outTarget");
+      const r = result.result;
+      const s = r.schedule;
+      const k = s.keys;
+      out.innerHTML = `
+        <div class="kv"><div class="k">Required hours (EV, excl. bonus)</div><div class="v">${fmt(result.required.hours,2)} h</div></div>
+        <div class="divider"></div>
+        <div class="mono">
+          Target=${fmt(targetIst,2)} Ist (exclude bonus)<br/><br/>
+          Keys (EV): T=${fmt(k.terror,3)} · H=${fmt(k.hate,3)} · D=${fmt(k.destruction,3)} → key value ${fmt(r.values.keyIst,2)} Ist<br/>
+          Extras (EV): ${fmt(r.values.extrasRegularIst,2)} Ist<br/>
+          Total (EV excl bonus): <span class="ok">${fmt(r.values.totalIstExclBonus,2)} Ist</span><br/>
+          Bonus (EV, not included): ${fmt(r.values.bonusIst,2)} Ist<br/>
+          Rate (at that point): ${fmt(r.rates.istPerHourExclBonus,3)} Ist/h (bonus EV ${fmt(r.rates.bonusPerHour,3)} Ist/h)
+        </div>
+        <div class="note">Target solving uses bisection over the same key-by-key rotation model.</div>
       `;
     }
 
@@ -178,30 +192,34 @@
 
         buildQuickStats();
 
-        el("btnTarget").addEventListener("click", () => {
-          const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras } = getDefaults();
-          const r = computeTheoryFromTargetIst({
-            targetIst: Number(el("targetIst").value),
-            Dc, Ds, Dn, tC_min, tS_min, tN_min,
-            extras,
-            phaseData: currentPhaseData()
-          });
-          renderTarget(r);
-        });
-
         el("btnHours").addEventListener("click", () => {
+          const hours = Number(el("hours").value);
           const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras } = getDefaults();
           const r = computeTheoryFromHours({
-            hours: Number(el("hours").value),
-            Dc, Ds, Dn, tC_min, tS_min, tN_min,
+            hours,
+            Dc, Ds, Dn,
+            tC_min, tS_min, tN_min,
             extras,
             phaseData: currentPhaseData()
           });
-          renderHours(r);
+          renderFromHours(r, hours);
         });
 
-        el("btnTarget").click();
+        el("btnTarget").addEventListener("click", () => {
+          const targetIst = Number(el("targetIst").value);
+          const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras } = getDefaults();
+          const res = computeTheoryFromTargetIst({
+            targetIst,
+            Dc, Ds, Dn,
+            tC_min, tS_min, tN_min,
+            extras,
+            phaseData: currentPhaseData()
+          });
+          renderTarget(res, targetIst);
+        });
+
         el("btnHours").click();
+        el("btnTarget").click();
 
       } catch (e) {
         const errEl = el("loadErr");
