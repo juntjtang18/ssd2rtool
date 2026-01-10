@@ -47,13 +47,20 @@ export function getPhaseOptions(priceTable) {
 
 // Price-table convention: { O: items, N: ist } => 1 item = N/O Ist
 export function priceInIst(name, phaseData) {
-  const entry = phaseData?.[name];
+  // Align with /model/priceTable.js normalization: uppercase rune keys (e.g., "Ral" -> "RAL").
+  const key = String(name ?? "").trim().toUpperCase();
+  if (!key) return 0;
+
+  const entry = phaseData?.[key];
   if (!entry) return 0;
+
   const O = Number(entry.O ?? 0);
   const N = Number(entry.N ?? 0);
   if (!(O > 0) || !(N > 0)) return 0;
+
   return N / O;
 }
+
 
 function splitExtras(extras) {
   const regular = [];
