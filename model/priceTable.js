@@ -13,7 +13,10 @@ export function getRunePriceIst(priceTable, phase, rune) {
   const p = String(phase);
   const R = normRune(rune);
   const table = priceTable?.phases?.[p];
-  if (!table) return null;
+
+  // If phase/table/rune missing => 0 (treat as "free/common")
+  if (!table) return 0;
+
   const v = table[R];
-  return Number.isFinite(v) ? v : null;
+  return Number.isFinite(v) ? v : 0;
 }
