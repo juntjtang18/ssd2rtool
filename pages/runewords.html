@@ -118,17 +118,8 @@
       </div>
     </div>
 
-    <!-- Bottom row -->
+    <!-- Bottom row (SWAPPED: Rune breakdown on left, Drops on right) -->
     <div class="grid" style="margin-top:14px;">
-      <!-- Predicted drops -->
-      <div class="card">
-        <h2>Total Drops Predicted</h2>
-        <div class="dropsBox">
-          <div class="dropsTitle mono">Keys (EV) + Extras (EV)</div>
-          <table class="dropsTable mono" id="dropsTable"></table>
-        </div>
-      </div>
-
       <!-- Rune breakdown -->
       <div class="card">
         <h2>Rune breakdown</h2>
@@ -137,6 +128,15 @@
           <span id="totalCost">—</span><span class="bigUnit">Ist (Total Cost)</span>
         </div>
         <table id="tbl" style="margin-top:10px;"></table>
+      </div>
+
+      <!-- Predicted drops -->
+      <div class="card">
+        <h2>Total Drops Predicted</h2>
+        <div class="dropsBox">
+          <div class="dropsTitle mono">Rounded integers (EV)</div>
+          <table class="dropsTable mono" id="dropsTable"></table>
+        </div>
       </div>
     </div>
   </div>
@@ -149,7 +149,7 @@
 
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
-    const fmtInt = (x) => (Number.isFinite(x) ? String(Math.round(x)) : "—");
+    const roundInt = (x) => (Number.isFinite(x) ? String(Math.round(x)) : "—");
 
     const els = {
       phase: el("phase"),
@@ -170,7 +170,6 @@
       tbl: el("tbl"),
     };
 
-    // Fixed planner buffer
     const BUFFER = 1.10;
 
     let priceTable = null;
@@ -306,11 +305,10 @@
 
         const piecesInt = Math.floor(RcTotal * dpr);
         const orders = Math.floor(piecesInt / q.O);
-        const rem = piecesInt - orders * q.O;
         const ist = orders * q.N;
 
         bankableIst += ist;
-        rows.push({ name, dpr, O: q.O, N: q.N, piecesInt, orders, rem, ist });
+        rows.push({ name, dpr, O: q.O, N: q.N, piecesInt, orders, ist });
       }
 
       rows.sort((a,b)=> b.ist - a.ist);
@@ -342,10 +340,10 @@
           return { RcTotal, rows, bankableIst, targetBankable };
         }
 
-        let best = { addRuns: Infinity, row: null };
+        let best = { addRuns: Infinity };
         for (const r of rows) {
           const addRunsEV = runsNeededForNextOrder({ RcTotal, row: r });
-          if (addRunsEV < best.addRuns) best = { addRuns: addRunsEV, row: r };
+          if (addRunsEV < best.addRuns) best = { addRuns: addRunsEV };
         }
 
         if (!Number.isFinite(best.addRuns) || best.addRuns === Infinity) {
@@ -399,11 +397,10 @@
 
       for (const r of rows) {
         if (r.ist <= 0) continue;
-
         totalBankable += r.ist;
 
         const left = document.createElement("div");
-        left.innerHTML = `<span class="tradeKey">${r.name}</span>  (${r.O}×${r.orders}${r.rem > 0 ? `, rem ${r.rem}` : ""})`;
+        left.innerHTML = `<span class="tradeKey">${r.name}</span>  (${r.O}×${r.orders})`;
 
         const right = document.createElement("div");
         right.className = "right";
@@ -422,8 +419,7 @@
       els.tradeList.appendChild(r2);
     }
 
-    function renderPredictedDrops({ Rc, Rs, Rn, phase, keysetsTarget, extrasRows }) {
-      // EV keys from planned runs
+    function renderPredictedDrops({ Rc, Rs, Rn, keysetsTarget, extrasRows }) {
       const Dc = Number(modelDefaults.Dc);
       const Ds = Number(modelDefaults.Ds);
       const Dn = Number(modelDefaults.Dn);
@@ -435,7 +431,7 @@
       const tr = (k, v, cls="") => {
         const row = document.createElement("tr");
         const td1 = document.createElement("td");
-        td1.className = cls || "";
+        td1.className = cls;
         td1.textContent = k;
         const td2 = document.createElement("td");
         td2.className = "right";
@@ -447,27 +443,38 @@
 
       els.dropsTable.innerHTML = "";
 
-      // Keys section
-      els.dropsTable.appendChild(tr("Keys", "", "muted"));
-      els.dropsTable.appendChild(tr("TKey (Countess EV)", fmt(evT, 2)));
-      els.dropsTable.appendChild(tr("HKey (Summoner EV)", fmt(evH, 2)));
-      els.dropsTable.appendChild(tr("DKey (Nihl EV)", fmt(evD, 2)));
-      els.dropsTable.appendChild(tr("Stop target (banked)", `${keysetsTarget}/${keysetsTarget}/${keysetsTarget}`));
+      // Keys (rounded)
+      els.dropsTable.appendChild(tr("TKey (EV)", roundInt(evT), "dropsName"));
+      els.dropsTable.appendChild(tr("HKey (EV)", roundInt(evH), "dropsName"));
+      els.dropsTable.appendChild(tr("DKey (EV)", roundInt(evD), "dropsName"));
+      els.dropsTable.appendChild(tr("Stop target", `${keysetsTarget}/${keysetsTarget}/${keysetsTarget}`, "muted"));
 
-      // Spacer
-      els.dropsTable.appendChild(tr("Extras (Countess EV)", "", "muted"));
+      // Extras drops (rounded pieces)
+      els.dropsTable.appendChild(tr("—", "—", "muted"));
 
-      // Extras EV pieces + bankable orders
-      // Use the same extras rows computed from integer pieces (piecesInt) for realistic “orders/rem”
-      // Also show EV pieces (Rc*dpr) to visualize expected drops.
+      // Separate “possible bonus”
+      const bonusRows = [];
+      const normalRows = [];
+
       for (const r of (extrasRows || [])) {
-        const evPieces = Rc * r.dpr;
-        // show only meaningful extras
-        if (!(r.O > 0 && r.N > 0)) continue;
+        const isBonus = String(r.name).toUpperCase().startsWith("BONUS");
+        if (isBonus) bonusRows.push(r); else normalRows.push(r);
+      }
 
-        const label = `${r.name}`;
-        const val = `EV≈${fmt(evPieces, 1)} pcs | ${r.O}×${r.orders}${r.rem ? `, rem ${r.rem}` : ""}`;
-        els.dropsTable.appendChild(tr(label, val));
+      for (const r of normalRows) {
+        const evPieces = Math.round(Rc * r.dpr);
+        if (evPieces <= 0) continue;
+        els.dropsTable.appendChild(tr(`${r.name} (EV pcs)`, String(evPieces)));
+      }
+
+      if (bonusRows.length) {
+        els.dropsTable.appendChild(tr("—", "—", "muted"));
+        els.dropsTable.appendChild(tr("Possible Bonus (Not Guaranteed)", "", "muted"));
+        for (const r of bonusRows) {
+          const evPieces = Math.round(Rc * r.dpr);
+          if (evPieces <= 0) continue;
+          els.dropsTable.appendChild(tr(`${r.name.replace(/^BONUS\s*/i,"")} (EV pcs)`, String(evPieces)));
+        }
       }
     }
 
@@ -527,7 +534,6 @@
         Rc: RcPlan,
         Rs: RsPlan,
         Rn: RnPlan,
-        phase,
         keysetsTarget,
         extrasRows: topup.rows
       });
