@@ -344,7 +344,8 @@ Hours-mode planner rule:
         `(total=${fmt(out.keys.T + out.keys.H + out.keys.D, 2)})`;
 
       els.earnRuns.textContent =
-        `Runs (expected): Rc≈${fmt(out.runs.runsC, 1)} | Rs≈${fmt(out.runs.runsS, 1)} | Rn≈${fmt(out.runs.runsN, 1)}`;
+        `Runs: Rc=${out.runs.runsC} | Rs=${out.runs.runsS} | Rn=${out.runs.runsN}`;
+
 
       els.earnTail.textContent =
         `Tail: boss=${out.tail?.boss || "—"} | fractionalKey≈${fmt(out.tail?.fracKey ?? NaN, 3)} | tailRuns≈${fmt(out.tail?.runs ?? NaN, 2)}`;
