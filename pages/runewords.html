@@ -97,9 +97,7 @@
         <div class="bigNumber"><span id="totalHours">—</span><span class="bigUnit">Hours</span></div>
 
         <div class="planBox" style="margin-top:10px;">
-          <div class="planGrid mono" id="planGrid">
-            <!-- filled by JS -->
-          </div>
+          <div class="planGrid mono" id="planGrid"></div>
           <div class="stopLine mono" id="targetKeys">—</div>
         </div>
 
@@ -125,6 +123,7 @@
     import { loadPriceTable } from "../model/priceTable.js";
     import { breakdownRuneword } from "../model/runewordsPlanner.js";
     import { computeFromIst } from "../model/keysPipeline.js";
+    import { getRuneQuote } from "../model/priceTable.js";
 
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
@@ -265,92 +264,77 @@
       return b;
     }
 
-    // ----- Batch helpers (no fractional Ist payouts) -----
-    function piecesPerIstFromPrice(priceIst) {
-      if (!Number.isFinite(priceIst) || priceIst <= 0) return Infinity;
-      return Math.max(1, Math.ceil(1 / priceIst));
-    }
-
-    function computeBatchableExtras({ RcTotal }) {
+    // ----- Unified (O,N) pricing rule from price table -----
+    // quote: { O, N, priceIst }
+    function computeBankableExtras({ RcTotal, phase }) {
       const extras = Array.isArray(modelDefaults.extras) ? modelDefaults.extras : [];
       const rows = [];
-
       let bankableIst = 0;
 
       for (const e of extras) {
-        const name = e.name ?? e.id ?? "Extra";
-        const priceIst = Number(e.priceIst ?? e.price ?? e.valueIst);
+        const name = String(e.name ?? e.id ?? "").trim().toUpperCase();
         const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
+        if (!name || !Number.isFinite(dpr) || dpr <= 0) continue;
 
-        if (!Number.isFinite(priceIst) || priceIst <= 0) continue;
-        if (!Number.isFinite(dpr) || dpr <= 0) continue;
+        const q = getRuneQuote(priceTable, phase, name);
+        if (!(q.N > 0) || !(q.O > 0)) continue; // not tradable / free / unknown
 
-        const ppi = Number.isFinite(e.piecesPerIst) ? Number(e.piecesPerIst) : piecesPerIstFromPrice(priceIst);
-        if (!Number.isFinite(ppi) || ppi <= 0) continue;
-
-        // Use integer pieces for display & batching (conservative)
         const pieces = Math.floor(RcTotal * dpr);
-        const batches = Math.floor(pieces / ppi); // each batch = 1 Ist
-        const rem = pieces - batches * ppi;
+        const orders = Math.floor(pieces / q.O);
+        const rem = pieces - orders * q.O;
+        const ist = orders * q.N;
 
-        bankableIst += batches;
+        bankableIst += ist;
 
         rows.push({
           name,
           pieces,
-          ppi,
-          batches,
+          O: q.O,
+          N: q.N,
+          orders,
           rem,
           dpr,
-          priceIst
+          ist
         });
       }
 
-      // sort by realized Ist desc
-      rows.sort((a,b)=> b.batches - a.batches);
-
+      rows.sort((a,b)=> b.ist - a.ist);
       return { rows, bankableIst };
     }
 
-    function runsNeededForNextBatch({ RcTotal, row }) {
-      // EV runs needed for this item to gain +1 more Ist batch
-      // (we use expected pieces, not floored pieces, for planning)
-      const ppi = row.ppi;
-      const dpr = row.dpr;
-      if (!Number.isFinite(ppi) || !Number.isFinite(dpr) || dpr <= 0) return Infinity;
-
-      const expectedPieces = RcTotal * dpr;
-      const currentBatches = Math.floor(expectedPieces / ppi);
-      const nextThreshold = (currentBatches + 1) * ppi;
+    function runsNeededForNextOrder({ RcTotal, row }) {
+      const expectedPieces = RcTotal * row.dpr;
+      const currentOrders = Math.floor(expectedPieces / row.O);
+      const nextThreshold = (currentOrders + 1) * row.O;
 
       const needPieces = nextThreshold - expectedPieces;
       if (!(needPieces > 0)) return Infinity;
 
-      return needPieces / dpr;
+      return needPieces / row.dpr;
     }
 
-    function topUpCountessRunsToBankableTarget({ baseRc, keysetsTarget, costIst }) {
-      // We bank keys as integer keysets => keysetsTarget Ist
-      // We bank extras as integer Ist batches (no fractions)
-      // Target bankable total: ceil(costIst)
+    function topUpCountessRunsToBankableTarget({ baseRc, keysetsTarget, costIst, phase }) {
+      // Keys banked: keysetsTarget Ist (since 1 keyset = 1 Ist)
+      // Extras banked: integer Ist via O/N orders
+      // Goal: >= ceil(costIst) bankable total
       const targetBankable = Math.ceil(costIst);
 
       let RcTotal = baseRc;
       let iter = 0;
 
-      while (iter < 200) {
-        const { rows, bankableIst } = computeBatchableExtras({ RcTotal });
+      while (iter < 300) {
+        const { rows, bankableIst } = computeBankableExtras({ RcTotal, phase });
         const bankableTotal = keysetsTarget + bankableIst;
 
         if (bankableTotal >= targetBankable) {
           return { RcTotal, rows, bankableIst, targetBankable };
         }
 
-        // choose the fastest next +1 Ist batch by extra runs
+        // Choose the quickest next +N Ist order among extras
         let best = { addRuns: Infinity, row: null };
 
         for (const r of rows) {
-          const addRunsEV = runsNeededForNextBatch({ RcTotal, row: r });
+          const addRunsEV = runsNeededForNextOrder({ RcTotal, row: r });
           if (addRunsEV < best.addRuns) best = { addRuns: addRunsEV, row: r };
         }
 
@@ -358,13 +342,11 @@
           return { RcTotal, rows, bankableIst, targetBankable };
         }
 
-        // enforce integer runs (planner)
-        const addRunsInt = Math.max(1, Math.ceil(best.addRuns));
-        RcTotal += addRunsInt;
+        RcTotal += Math.max(1, Math.ceil(best.addRuns));
         iter++;
       }
 
-      const { rows, bankableIst } = computeBatchableExtras({ RcTotal });
+      const { rows, bankableIst } = computeBankableExtras({ RcTotal, phase });
       return { RcTotal, rows, bankableIst, targetBankable };
     }
 
@@ -406,19 +388,17 @@
       let totalBankable = 0;
 
       for (const r of rows) {
-        // show only meaningful lines
-        if (r.batches <= 0 && r.pieces <= 0) continue;
+        if (r.ist <= 0 && r.pieces <= 0) continue;
 
-        totalBankable += r.batches;
+        totalBankable += r.ist;
 
         const left = document.createElement("div");
         left.innerHTML =
-          `<span class="tradeKey">${r.name}</span>  (${r.ppi}×${r.batches}${r.batches>0 ? "" : ""}` +
-          `${r.pieces>0 ? `, rem ${r.rem}` : ""})`;
+          `<span class="tradeKey">${r.name}</span>  (${r.O}×${r.orders}${r.rem > 0 ? `, rem ${r.rem}` : ""})`;
 
         const right = document.createElement("div");
         right.className = "right";
-        right.textContent = `${r.batches} Ist`;
+        right.textContent = `${r.ist} Ist`;
 
         els.tradeList.appendChild(left);
         els.tradeList.appendChild(right);
@@ -463,11 +443,12 @@
       const baseRs = Math.ceil(out.Rs * BUFFER);
       const baseRn = Math.ceil(out.Rn * BUFFER);
 
-      // Top-up Countess runs so extras can be sold in integer Ist batches
+      // Top-up Countess runs so extras can be sold in integer Ist orders
       const topup = topUpCountessRunsToBankableTarget({
         baseRc,
         keysetsTarget,
-        costIst
+        costIst,
+        phase
       });
 
       const RcPlan = topup.RcTotal;
@@ -498,8 +479,22 @@
     runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
 
-    populateTagOptions();
+    // tags
+    els.tag.innerHTML = "";
+    const optAll = document.createElement("option");
+    optAll.value = "all";
+    optAll.textContent = "All";
+    els.tag.appendChild(optAll);
+    for (const t of (runewordsData.tags || [])) {
+      const opt = document.createElement("option");
+      opt.value = t;
+      opt.textContent = t;
+      els.tag.appendChild(opt);
+    }
+
     setPhaseDefault();
+
+    // initial runeword list
     renderRunewordOptions();
 
     els.calc.addEventListener("click", calc);
