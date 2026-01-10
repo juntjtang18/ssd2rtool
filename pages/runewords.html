@@ -13,33 +13,39 @@
     .grid { display:grid; grid-template-columns: 1fr; gap: 14px; }
     @media (min-width: 980px){ .grid { grid-template-columns: 1fr 1fr; } }
     .card { background:var(--card); border:1px solid var(--line); border-radius: 14px; padding: 14px; }
-    .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); font-weight: 700; }
+    .card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); font-weight: 800; letter-spacing: .2px; }
     .row { display:flex; gap:10px; align-items:center; margin: 10px 0; }
     label { flex: 1; color:var(--muted); font-size: 13px; }
     select, input { width: 260px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
     .btn { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: var(--accent); color:#05202a; font-weight: 900; cursor:pointer; margin-top: 8px; }
     .hr { height:1px; background:var(--line); margin: 12px 0; border:0; }
-    .outBig { font-size: 34px; font-weight: 950; margin: 8px 0 4px; }
     .tiny { color:var(--muted); font-size: 12px; line-height: 1.55; white-space: pre-line; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    table { width:100%; border-collapse: collapse; }
-    td { padding: 6px 0; border-bottom: 1px solid #1c2735; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    details { border: 1px solid var(--line); border-radius: 12px; padding: 10px 10px; background: #0f1318; }
-    summary { cursor: pointer; color: var(--text); font-weight: 700; list-style: none; }
-    summary::-webkit-details-marker { display:none; }
+
+    /* Planner emphasis */
+    .sectionTitle { font-size: 13px; color: var(--muted); font-weight: 700; margin-top: 2px; }
+    .bigNumber { font-size: 40px; font-weight: 950; margin: 6px 0 2px; line-height: 1.0; }
+    .bigUnit { font-size: 13px; color: var(--muted); font-weight: 700; margin-left: 6px; }
+    .planBox { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background:#0f1318; }
+    .planLine { font-size: 14px; line-height: 1.65; }
+    .planKey { color: var(--accent); font-weight: 900; }
+    .tradeGrid { display:grid; grid-template-columns: 1fr 120px; gap: 6px 12px; margin-top: 10px; }
+    .tradeGrid div { padding: 2px 0; }
+    .right { text-align:right; }
+    table { width:100%; border-collapse: collapse; }
+    td { padding: 6px 0; border-bottom: 1px solid #1c2735; }
   </style>
 </head>
 
 <body>
   <div class="wrap">
     <h1>SSD2R Tool — Runewords Planner</h1>
-    <p class="sub">
-Pick a runeword + season phase → get a farming plan.
-    </p>
+    <p class="sub">Pick a runeword + season phase → get a farming plan.</p>
 
     <div class="grid">
+      <!-- Inputs -->
       <div class="card">
         <h2>Inputs</h2>
 
@@ -77,32 +83,36 @@ Pick a runeword + season phase → get a farming plan.
         </p>
       </div>
 
+      <!-- Planner Output -->
       <div class="card">
-        <h2>Farming Plan</h2>
+        <h2>Planner</h2>
 
-        <div class="tiny">Runeword cost</div>
-        <div class="outBig"><span id="costIst">—</span> <span class="tiny">Ist</span></div>
-
-        <div class="tiny">Total time</div>
-        <div class="outBig"><span id="totalHours">—</span> <span class="tiny">hours</span></div>
+        <!-- Cost block -->
+        <div class="sectionTitle">Cost</div>
+        <div class="bigNumber"><span id="costIst">—</span><span class="bigUnit">Ist</span></div>
 
         <hr class="hr"/>
 
-        <div class="tiny mono" id="planLines">—</div>
-        <div class="tiny mono" id="targetKeys">—</div>
+        <!-- Farming plan block -->
+        <div class="sectionTitle">Farming Plan</div>
+        <div class="bigNumber"><span id="totalHours">—</span><span class="bigUnit">Hours</span></div>
+
+        <div class="planBox" style="margin-top:10px;">
+          <div class="planLine" id="planLines">—</div>
+          <div class="planLine" id="targetKeys" style="margin-top:8px;">—</div>
+        </div>
+
+        <div class="planBox" style="margin-top:12px;">
+          <div class="sectionTitle" style="margin:0 0 6px;">Trade list (extras)</div>
+          <div class="tradeGrid mono" id="tradeList">—</div>
+        </div>
       </div>
 
+      <!-- Rune breakdown -->
       <div class="card" style="grid-column: 1 / -1;">
         <h2>Rune breakdown</h2>
         <div class="tiny mono" id="baseLine">—</div>
         <table id="tbl"></table>
-      </div>
-
-      <div class="card" style="grid-column: 1 / -1;">
-        <details>
-          <summary>Details</summary>
-          <div class="tiny mono" id="detailsLine" style="margin-top:10px;">—</div>
-        </details>
       </div>
     </div>
   </div>
@@ -126,14 +136,13 @@ Pick a runeword + season phase → get a farming plan.
       totalHours: el("totalHours"),
       planLines: el("planLines"),
       targetKeys: el("targetKeys"),
+      tradeList: el("tradeList"),
 
       baseLine: el("baseLine"),
       tbl: el("tbl"),
-      detailsLine: el("detailsLine"),
     };
 
-    // Fixed planner buffer (no UI option)
-    const BUFFER = 1.10;
+    const BUFFER = 1.10; // fixed +10% buffer for planner
 
     let priceTable = null;
     let runewordsData = null;
@@ -179,9 +188,7 @@ Pick a runeword + season phase → get a farming plan.
 
       const list = (runewordsData.runewords || []).filter(r => {
         const tags = Array.isArray(r.tags) ? r.tags : [];
-        const okTag = (tag === "all") || tags.includes(tag);
-        if (!okTag) return false;
-
+        if (tag !== "all" && !tags.includes(tag)) return false;
         if (!query) return true;
         const hay = `${r.name} ${r.id} ${tags.join(" ")}`.toLowerCase();
         return hay.includes(query);
@@ -251,6 +258,53 @@ Pick a runeword + season phase → get a farming plan.
       return b;
     }
 
+    function renderTradeList({ RcPlan }) {
+      const extras = Array.isArray(modelDefaults.extras) ? modelDefaults.extras : [];
+      if (!extras.length) {
+        els.tradeList.textContent = "—";
+        return;
+      }
+
+      // Each extra item assumed: { name, priceIst, dropPerRun }
+      // Expected value per runC: dropPerRun * priceIst
+      // Expected total units dropped in plan: RcPlan * dropPerRun
+      // Expected Ist from that extra: units * priceIst
+      const rows = extras.map(e => {
+        const name = e.name ?? e.id ?? "Extra";
+        const priceIst = Number(e.priceIst ?? e.price ?? e.valueIst);
+        const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
+        const units = (Number.isFinite(dpr) ? RcPlan * dpr : NaN);
+        const ist = (Number.isFinite(units) && Number.isFinite(priceIst) ? units * priceIst : NaN);
+        return { name, units, ist };
+      }).filter(r => Number.isFinite(r.ist) && r.ist > 0);
+
+      rows.sort((a,b)=> b.ist - a.ist);
+
+      // Render
+      els.tradeList.innerHTML = "";
+      const totalExtrasIst = rows.reduce((s,r)=> s + r.ist, 0);
+
+      for (const r of rows) {
+        const left = document.createElement("div");
+        left.textContent = `${r.name}  (≈${fmt(r.units, 1)} pcs)`;
+
+        const right = document.createElement("div");
+        right.className = "right";
+        right.textContent = `${fmt(r.ist, 2)} Ist`;
+
+        els.tradeList.appendChild(left);
+        els.tradeList.appendChild(right);
+      }
+
+      const sepL = document.createElement("div");
+      sepL.textContent = "Total extras";
+      const sepR = document.createElement("div");
+      sepR.className = "right";
+      sepR.textContent = `${fmt(totalExtrasIst, 2)} Ist`;
+      els.tradeList.appendChild(sepL);
+      els.tradeList.appendChild(sepR);
+    }
+
     function calc() {
       const phase = els.phase.value;
       localStorage.setItem("seasonPhase", phase);
@@ -274,7 +328,7 @@ Pick a runeword + season phase → get a farming plan.
         extras: modelDefaults.extras
       });
 
-      // Planner uses buffered INTEGER runs (ceil)
+      // Buffered INTEGER runs (ceil)
       const RcPlan = Math.ceil(out.Rc * BUFFER);
       const RsPlan = Math.ceil(out.Rs * BUFFER);
       const RnPlan = Math.ceil(out.Rn * BUFFER);
@@ -286,20 +340,18 @@ Pick a runeword + season phase → get a farming plan.
 
       els.totalHours.textContent = fmt(totalHoursPlan, 2);
 
-      els.planLines.textContent =
-        `Hell Countess:  ${fmt(hC, 2)} h  (${RcPlan} runs)\n` +
-        `Hell Summoner:  ${fmt(hS, 2)} h  (${RsPlan} runs)\n` +
-        `Hell Nihlathak: ${fmt(hN, 2)} h  (${RnPlan} runs)`;
+      // Bigger, planner-style lines (no explanations)
+      els.planLines.innerHTML =
+        `<span class="planKey">Hell Countess:</span>  ${fmt(hC, 2)} h  (${RcPlan} runs)\n` +
+        `<span class="planKey">Hell Summoner:</span>  ${fmt(hS, 2)} h  (${RsPlan} runs)\n` +
+        `<span class="planKey">Hell Nihlathak:</span> ${fmt(hN, 2)} h  (${RnPlan} runs)`;
 
-      // Keyset target (buffered, integer)
       const keysetsTarget = Math.ceil(out.X * BUFFER);
       els.targetKeys.textContent =
         `Stop at: ${keysetsTarget} TKey + ${keysetsTarget} HKey + ${keysetsTarget} DKey`;
 
-      // Move non-plan information to Details
-      const hoursEV = (out.istPerHour > 0) ? (Y / out.istPerHour) : NaN;
-      els.detailsLine.textContent =
-        `Phase=${phase} | rate≈${fmt(out.istPerHour, 3)} Ist/h | EV hours≈${fmt(hoursEV, 2)} | buffer=+10% | missing rune prices=0`;
+      // Trade list (extras) based on Countess plan runs
+      renderTradeList({ RcPlan });
     }
 
     // init
