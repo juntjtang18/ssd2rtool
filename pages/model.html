@@ -90,6 +90,18 @@ Hours-mode planner rule:
             <input id="tN_min" type="number" step="0.1" min="0.1">
           </div>
         </div>
+
+        <div class="card" style="margin:0;">
+          <h2>Market phase (price table)</h2>
+          <div class="row">
+            <label>Phase</label>
+            <select id="phase" style="width:200px; padding:10px 10px; border-radius:10px; border:1px solid var(--line); background:#0f1318; color:var(--text); font-size:14px;">
+              <option value="" selected>loading…</option>
+            </select>
+          </div>
+          <p class="tiny">Uses <span class="mono">/config/rune-price-table.json</span> quotes (O→N).</p>
+        </div>
+
       </div>
 
       <div class="tiny" id="extrasNote" style="margin-top:10px;"></div>
@@ -170,210 +182,403 @@ Hours-mode planner rule:
   </div>
 
   <script type="module">
-    import { computeFromIst } from "../model/keysPipeline.js";
-    import { planFromHoursDeterministic } from "../model/keysPipelineDeterministic.js";
+  import { planRotationToTargetIst } from "../model/keysPipeline.js";
+  import { loadPriceTable, getRuneQuote } from "../model/priceTable.js";
 
-    const el = (id) => document.getElementById(id);
-    const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
-    const num = (inputEl) => {
-      const n = parseFloat(inputEl.value);
-      return Number.isFinite(n) ? n : NaN;
+  const el = (id) => document.getElementById(id);
+  const fmt = (x, d=2) => (Number.isFinite(x) ? x.toFixed(d) : "—");
+  const num = (inputEl) => {
+    const n = parseFloat(inputEl.value);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const els = {
+    cfgStatus: el("cfgStatus"),
+    extrasNote: el("extrasNote"),
+
+    Dc: el("Dc"), Ds: el("Ds"), Dn: el("Dn"),
+    tC_min: el("tC_min"), tS_min: el("tS_min"), tN_min: el("tN_min"),
+    phase: el("phase"),
+
+    Y: el("Y"),
+    H: el("H"),
+
+    needKeysets: el("needKeysets"),
+    needHours: el("needHours"),
+    needRuns: el("needRuns"),
+    needRevenue: el("needRevenue"),
+    needRate: el("needRate"),
+    needWarn: el("needWarn"),
+
+    earnIst: el("earnIst"),
+    earnKeys: el("earnKeys"),
+    earnRuns: el("earnRuns"),
+    earnTail: el("earnTail"),
+    earnBreakdown: el("earnBreakdown"),
+    earnRate: el("earnRate"),
+    earnWarn: el("earnWarn"),
+
+    calcIst: el("calcIst"),
+    calcHours: el("calcHours"),
+  };
+
+  let defaults = null;
+  let priceTable = null;
+
+  function getPhase() {
+    const v = String(els.phase?.value || "").trim();
+    if (v) return v;
+    const d = priceTable?.defaultPhase;
+    return (d != null) ? String(d) : "2";
+  }
+
+  function clampIntInput(inputEl, min) {
+    const v = Math.floor(num(inputEl));
+    const fixed = Number.isFinite(v) ? Math.max(min, v) : min;
+    inputEl.value = String(fixed);
+    return fixed;
+  }
+
+  function baseParams() {
+    return {
+      Dc: num(els.Dc),
+      Ds: num(els.Ds),
+      Dn: num(els.Dn),
+      tC_min: num(els.tC_min),
+      tS_min: num(els.tS_min),
+      tN_min: num(els.tN_min),
+      extras: (defaults && Array.isArray(defaults.extras)) ? defaults.extras : []
     };
+  }
 
-    const els = {
-      cfgStatus: el("cfgStatus"),
-      extrasNote: el("extrasNote"),
+  function splitExtras(extras, phase) {
+    const bonus = [];
+    const regular = [];
 
-      Dc: el("Dc"), Ds: el("Ds"), Dn: el("Dn"),
-      tC_min: el("tC_min"), tS_min: el("tS_min"), tN_min: el("tN_min"),
+    for (const e of (extras || [])) {
+      const raw = String(e.name || "");
+      const nameUpper = raw.toUpperCase().trim();
+      const isBonus = nameUpper.startsWith("BONUS");
+      const pricedName = isBonus ? nameUpper.replace(/^BONUS\s*/i, "") : nameUpper;
 
-      Y: el("Y"),
-      H: el("H"),
+      const dpr = Number(e.dropPerRun ?? e.D ?? e.rate) || 0;
+      const q = priceTable ? getRuneQuote(priceTable, phase, pricedName) : { priceIst: 0 };
 
-      needKeysets: el("needKeysets"),
-      needHours: el("needHours"),
-      needRuns: el("needRuns"),
-      needRevenue: el("needRevenue"),
-      needRate: el("needRate"),
-      needWarn: el("needWarn"),
+      const item = { name: raw, pricedName, dropPerRun: dpr, priceIst: q.priceIst || 0 };
 
-      earnIst: el("earnIst"),
-      earnKeys: el("earnKeys"),
-      earnRuns: el("earnRuns"),
-      earnTail: el("earnTail"),
-      earnBreakdown: el("earnBreakdown"),
-      earnRate: el("earnRate"),
-      earnWarn: el("earnWarn"),
+      if (isBonus) bonus.push(item);
+      else regular.push(item);
+    }
 
-      calcIst: el("calcIst"),
-      calcHours: el("calcHours"),
-    };
+    const VbonusC = bonus.reduce((s, e) => s + e.priceIst * e.dropPerRun, 0);
+    const VregularC = regular.reduce((s, e) => s + e.priceIst * e.dropPerRun, 0);
+    return { VbonusC, VregularC, bonus, regular };
+  }
 
-    let defaults = null;
+  function bankableExtrasIst(piecesMap, phase) {
+    let ist = 0;
+    const rows = [];
 
-    function splitExtras(extras) {
-      const bonus = [];
-      const regular = [];
+    for (const [name, p] of Object.entries(piecesMap || {})) {
+      const q = getRuneQuote(priceTable, phase, name); // {O,N,priceIst}
+      const piecesInt = Math.floor(Number(p) || 0);
 
-      for (const e of (extras || [])) {
-        const name = String(e.name || "");
-        const priceIst = Number(e.priceIst) || 0;
-        const dropPerRun = Number(e.dropPerRun) || 0;
-        const item = { name, priceIst, dropPerRun };
-
-        if (name.toLowerCase().startsWith("bonus")) bonus.push(item);
-        else regular.push(item);
+      if (!q || !(q.O > 0) || !(q.N > 0)) {
+        rows.push({ name, piecesInt, O: 0, orders: 0, ist: 0, N: 0 });
+        continue;
       }
 
-      const VbonusC = bonus.reduce((s, e) => s + e.priceIst * e.dropPerRun, 0);
-      const VregularC = regular.reduce((s, e) => s + e.priceIst * e.dropPerRun, 0);
-      return { VbonusC, VregularC, bonus, regular };
+      const orders = Math.floor(piecesInt / q.O);
+      const bank = orders * q.N;
+
+      if (orders > 0) ist += bank;
+      rows.push({ name, piecesInt, O: q.O, orders, ist: bank, N: q.N });
     }
 
-    function baseParams() {
-      return {
-        Dc: num(els.Dc),
-        Ds: num(els.Ds),
-        Dn: num(els.Dn),
-        tC_min: num(els.tC_min),
-        tS_min: num(els.tS_min),
-        tN_min: num(els.tN_min),
-        extras: (defaults && Array.isArray(defaults.extras)) ? defaults.extras : []
-      };
+    rows.sort((a,b)=> b.ist - a.ist);
+    return { ist, rows };
+  }
+
+  function possibleBonusIst(piecesMap, phase) {
+    let ist = 0;
+    const rows = [];
+
+    for (const [name, p] of Object.entries(piecesMap || {})) {
+      const q = getRuneQuote(priceTable, phase, name);
+      const piecesInt = Math.floor(Number(p) || 0);
+
+      if (!q || !(q.O > 0) || !(q.N > 0)) {
+        rows.push({ name, piecesInt, O: 0, orders: 0, ist: 0, N: 0 });
+        continue;
+      }
+
+      const orders = Math.floor(piecesInt / q.O);
+      const bank = orders * q.N;
+      ist += bank;
+      rows.push({ name, piecesInt, O: q.O, orders, ist: bank, N: q.N });
     }
 
-    async function loadDefaults() {
-      try {
-        const res = await fetch("../config/model-parameters.json", { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        defaults = json.defaults;
+    rows.sort((a,b)=> b.ist - a.ist);
+    return { ist, rows };
+  }
 
-        els.Dc.value = defaults.Dc;
-        els.Ds.value = defaults.Ds;
-        els.Dn.value = defaults.Dn;
+  function planFromHoursRotation({ hours, phase, params, keyIst = 1/3 }) {
+    // Deterministic expected-time planner with 1 tail fractional key
+    const Dc = Number(params.Dc);
+    const Ds = Number(params.Ds);
+    const Dn = Number(params.Dn);
 
-        els.tC_min.value = defaults.tC_min;
-        els.tS_min.value = defaults.tS_min;
-        els.tN_min.value = defaults.tN_min;
+    const tC = Number(params.tC_min);
+    const tS = Number(params.tS_min);
+    const tN = Number(params.tN_min);
 
-        const { VbonusC, VregularC } = splitExtras(defaults.extras);
-        const VextraC = VbonusC + VregularC;
+    if (!(Dc > 0 && Ds > 0 && Dn > 0 && tC > 0 && tS > 0 && tN > 0)) {
+      throw new Error("Invalid key pipeline parameters (D* and t*_min must be > 0).");
+    }
 
-        els.extrasNote.textContent =
-          `Extras (Countess-only) loaded: ${(defaults.extras||[]).length} items. ` +
-          `VextraC ≈ ${fmt(VextraC, 4)} Ist/run(C) = regular ${fmt(VregularC,4)} + bonus ${fmt(VbonusC,4)}.`;
+    const runsPerT = Math.ceil(1 / Dc);
+    const runsPerH = Math.ceil(1 / Ds);
+    const runsPerD = Math.ceil(1 / Dn);
 
-        els.cfgStatus.textContent = "loaded";
-      } catch (e) {
-        els.cfgStatus.textContent = "failed";
-        console.error(e);
+    const extras = Array.isArray(params.extras) ? params.extras : [];
+    const regularExtras = extras.filter(x => !String(x.name || x.id || "").toUpperCase().startsWith("BONUS"));
+    const bonusExtras   = extras.filter(x =>  String(x.name || x.id || "").toUpperCase().startsWith("BONUS"));
+
+    const pcs = {};
+    const pcsBonus = {};
+    for (const e of regularExtras) pcs[String(e.name || e.id).toUpperCase()] = 0;
+    for (const e of bonusExtras)   pcsBonus[String(e.name || e.id).toUpperCase().replace(/^BONUS\s*/i,"")] = 0;
+
+    let runsC = 0, runsS = 0, runsN = 0;
+    let minutesC = 0, minutesS = 0, minutesN = 0;
+
+    let T = 0, H = 0, D = 0; // keys (T/H/D); tail may add fractional
+
+    const order = ["C","S","N"];
+    let idx = 0;
+    let remaining = Number(hours) * 60;
+
+    function addExtras(runs) {
+      // called only for Countess
+      for (const e of regularExtras) {
+        const name = String(e.name || e.id).toUpperCase();
+        const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
+        if (dpr > 0) pcs[name] = (pcs[name] ?? 0) + runs * dpr;
+      }
+      for (const e of bonusExtras) {
+        const raw = String(e.name || e.id).toUpperCase();
+        const name = raw.replace(/^BONUS\s*/i,"");
+        const dpr = Number(e.dropPerRun ?? e.D ?? e.rate);
+        if (dpr > 0) pcsBonus[name] = (pcsBonus[name] ?? 0) + runs * dpr;
       }
     }
 
-    function integerPlanFromKeysets(K, Dc, Ds, Dn, secPerKeyset, VregularC, VbonusC) {
-      const Rc = K / Dc;
-      const Rs = K / Ds;
-      const Rn = K / Dn;
-
-      const hours = (K * secPerKeyset) / 3600;
-
-      const extraRegularIst = Rc * VregularC;
-      const bonusExpectedIst = Rc * VbonusC;
-      const keysetIst = K; // 1 keyset = 1 Ist
-
-      const totalIst = keysetIst + extraRegularIst + bonusExpectedIst;
-      const istPerHour = totalIst / hours;
-
-      return { K, Rc, Rs, Rn, hours, keysetIst, extraRegularIst, bonusExpectedIst, totalIst, istPerHour };
+    function stepCostMinutes(boss) {
+      if (boss === "C") return runsPerT * tC;
+      if (boss === "S") return runsPerH * tS;
+      return runsPerD * tN;
     }
 
-    function clampIntInput(inputEl, min) {
-      const v = Math.floor(num(inputEl));
-      const fixed = Number.isFinite(v) ? Math.max(min, v) : min;
-      inputEl.value = String(fixed);
-      return fixed;
+    function doFullStep(boss) {
+      if (boss === "C") {
+        runsC += runsPerT; minutesC += runsPerT * tC; T += 1; addExtras(runsPerT);
+      } else if (boss === "S") {
+        runsS += runsPerH; minutesS += runsPerH * tS; H += 1;
+      } else {
+        runsN += runsPerD; minutesN += runsPerD * tN; D += 1;
+      }
     }
 
-    function calcIst() {
-      const Y = clampIntInput(els.Y, 1);
-      const p = baseParams();
-      const out = computeFromIst({ ...p, Y });
-
-      const { VbonusC, VregularC } = splitExtras(p.extras);
-
-      // integer keyset plan: CEIL so you reach the target with expectation
-      const K = Math.max(1, Math.ceil(out.X));
-      const plan = integerPlanFromKeysets(K, p.Dc, p.Ds, p.Dn, out.secPerKeyset, VregularC, VbonusC);
-
-      els.needKeysets.textContent = String(plan.K);
-      els.needHours.textContent = fmt(plan.hours, 2);
-
-      els.needRuns.textContent =
-        `Runs (expected): Rc=${fmt(plan.Rc, 0)} | Rs=${fmt(plan.Rs, 0)} | Rn=${fmt(plan.Rn, 0)}`;
-
-      els.needRevenue.textContent =
-        `Revenue: keysets=${fmt(plan.keysetIst,0)} Ist + extras=${fmt(plan.extraRegularIst,2)} Ist + bonus(EV)=${fmt(plan.bonusExpectedIst,2)} Ist = total ${fmt(plan.totalIst,2)} Ist`;
-
-      els.needRate.textContent =
-        `Predicted revenue/hour ≈ ${fmt(plan.istPerHour, 3)} Ist/h`;
-
-      const margin = plan.totalIst - Y;
-      els.needWarn.textContent =
-        `Note: integer keysets means you may exceed target by ≈ ${fmt(margin,2)} Ist (expected).`;
+    // full steps
+    while (remaining > 1e-9) {
+      const boss = order[idx];
+      const cost = stepCostMinutes(boss);
+      if (remaining < cost) break;
+      doFullStep(boss);
+      remaining -= cost;
+      idx = (idx + 1) % 3;
     }
 
-    function calcHours() {
-      const H = clampIntInput(els.H, 3);
-      const p = baseParams();
-
-      const out = planFromHoursDeterministic({
-        hours: H,
-        Dc: p.Dc, Ds: p.Ds, Dn: p.Dn,
-        tC_min: p.tC_min, tS_min: p.tS_min, tN_min: p.tN_min,
-        extras: p.extras,
-        keyIst: 1/3,
-        startBoss: "C"
-      });
-
-      els.earnIst.textContent = fmt(out.totalIst, 2);
-
-      // Keys: two are integers, one MAY be fractional due to tail
-      els.earnKeys.textContent =
-        `Keys: T=${fmt(out.keys.T, 2)} | H=${fmt(out.keys.H, 2)} | D=${fmt(out.keys.D, 2)} ` +
-        `(total=${fmt(out.keys.T + out.keys.H + out.keys.D, 2)})`;
-
-      els.earnRuns.textContent =
-        `Runs: Rc=${out.runs.runsC} | Rs=${out.runs.runsS} | Rn=${out.runs.runsN}`;
-
-
-      els.earnTail.textContent =
-        `Tail: boss=${out.tail?.boss || "—"} | fractionalKey≈${fmt(out.tail?.fracKey ?? NaN, 3)} | tailRuns≈${fmt(out.tail?.runs ?? NaN, 2)}`;
-
-      els.earnBreakdown.textContent =
-        `Value: banked keys=${fmt(out.bankedKeyIst, 2)} Ist + extras=${fmt(out.extrasIst, 2)} Ist (VextraC≈${fmt(out.VextraC, 4)} Ist/runC)`;
-
-      els.earnRate.textContent =
-        `Predicted revenue/hour ≈ ${fmt(out.istPerHour, 3)} Ist/h`;
-
-      els.earnWarn.textContent =
-        `Deterministic rotation planner (expected-time). One fractional key can appear only in tail.`;
+    // tail (one boss fractional)
+    let tail = null;
+    if (remaining > 1e-9) {
+      const boss = order[idx];
+      if (boss === "C") {
+        const tailRuns = remaining / tC;
+        runsC += tailRuns; minutesC += remaining;
+        const fracKey = tailRuns * Dc;
+        T += fracKey;
+        addExtras(tailRuns);
+        tail = { boss: "C", runs: tailRuns, fracKey };
+      } else if (boss === "S") {
+        const tailRuns = remaining / tS;
+        runsS += tailRuns; minutesS += remaining;
+        const fracKey = tailRuns * Ds;
+        H += fracKey;
+        tail = { boss: "S", runs: tailRuns, fracKey };
+      } else {
+        const tailRuns = remaining / tN;
+        runsN += tailRuns; minutesN += remaining;
+        const fracKey = tailRuns * Dn;
+        D += fracKey;
+        tail = { boss: "N", runs: tailRuns, fracKey };
+      }
+      remaining = 0;
     }
 
-    await loadDefaults();
+    const { ist: extrasIst } = bankableExtrasIst(pcs, phase);
+    const { ist: bonusIst } = possibleBonusIst(pcsBonus, phase);
 
-    // initial compute
-    calcIst();
-    calcHours();
+    const keysIst = (T + H + D) * keyIst;
+    const totalIst = keysIst + extrasIst; // bonus not included
 
-    // buttons
-    els.calcIst.addEventListener("click", calcIst);
-    els.calcHours.addEventListener("click", calcHours);
+    const istPerHour = totalIst / Math.max(1e-9, Number(hours));
+    const { VbonusC, VregularC } = splitExtras(extras, phase);
 
-    // auto-recalc on changes
-    ["Dc","Ds","Dn","tC_min","tS_min","tN_min","Y","H"].forEach(id => {
-      el(id).addEventListener("input", () => { calcIst(); calcHours(); });
+    return {
+      hours: Number(hours),
+      keys: { T, H, D },
+      runs: { runsC, runsS, runsN },
+      tail,
+      bankedKeyIst: keysIst,
+      extrasIst,
+      bonusPossibleIst: bonusIst,
+      VextraC_regular: VregularC,
+      VextraC_bonus: VbonusC,
+      totalIst,
+      istPerHour
+    };
+  }
+
+  async function loadDefaults() {
+    try {
+      const [paramsRes, price] = await Promise.all([
+        fetch("../config/model-parameters.json", { cache: "no-store" }),
+        loadPriceTable()
+      ]);
+
+      if (!paramsRes.ok) throw new Error(`Failed to load model-parameters.json: HTTP ${paramsRes.status}`);
+      const json = await paramsRes.json();
+      defaults = json.defaults;
+      priceTable = price;
+
+      // populate phase selector
+      const phases = Object.keys(priceTable?.phases || {}).sort((a,b)=> Number(a)-Number(b));
+      els.phase.innerHTML = "";
+      for (const p of phases) {
+        const opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = `Phase ${p}`;
+        els.phase.appendChild(opt);
+      }
+      const defPhase = (priceTable?.defaultPhase != null) ? String(priceTable.defaultPhase) : (phases[0] || "2");
+      els.phase.value = defPhase;
+
+      // set defaults
+      els.Dc.value = defaults.Dc;
+      els.Ds.value = defaults.Ds;
+      els.Dn.value = defaults.Dn;
+
+      els.tC_min.value = defaults.tC_min;
+      els.tS_min.value = defaults.tS_min;
+      els.tN_min.value = defaults.tN_min;
+
+      const { VbonusC, VregularC } = splitExtras(defaults.extras, getPhase());
+      const VextraC = VbonusC + VregularC;
+
+      els.extrasNote.textContent =
+        `Config loaded: keys + times + extras (${(defaults.extras||[]).length} items). ` +
+        `VextraC ≈ ${fmt(VextraC, 4)} Ist/run(C) = regular ${fmt(VregularC,4)} + bonus ${fmt(VbonusC,4)}.`;
+
+      els.cfgStatus.textContent = "loaded";
+    } catch (e) {
+      els.cfgStatus.textContent = "failed";
+      console.error(e);
+    }
+  }
+
+  function calcIst() {
+    const Y = clampIntInput(els.Y, 1);
+    const p = baseParams();
+    const phase = getPhase();
+
+    if (!priceTable) return;
+
+    const out = planRotationToTargetIst({
+      targetIst: Y,
+      phase,
+      priceTable,
+      params: p,
+      buffer: 1.0
     });
-  </script>
+
+    els.needKeysets.textContent = String(out.keys.keysets);
+    els.needHours.textContent = fmt(out.hours.total, 2);
+
+    els.needRuns.textContent =
+      `Runs (deterministic): Rc=${fmt(out.runs.countess, 0)} | Rs=${fmt(out.runs.summoner, 0)} | Rn=${fmt(out.runs.nihl, 0)}`;
+
+    const istPerHour = out.bankable.totalIst / Math.max(1e-9, out.hours.total);
+    els.needRevenue.textContent =
+      `Bankable: keysets=${fmt(out.bankable.keysIst,0)} Ist + extras=${fmt(out.bankable.extrasIst,2)} Ist = total ${fmt(out.bankable.totalIst,2)} Ist` +
+      ` | bonusPossible=${fmt(out.bankable.possibleBonusIst,2)} Ist`;
+
+    els.needRate.textContent =
+      `Predicted revenue/hour ≈ ${fmt(istPerHour, 3)} Ist/h`;
+
+    const margin = out.bankable.totalIst - Y;
+    els.needWarn.textContent =
+      `Note: planner stops when bankable total ≥ target. Expected overage ≈ ${fmt(margin,2)} Ist. (bonusPossible is NOT guaranteed)`;
+  }
+
+  function calcHours() {
+    const H = clampIntInput(els.H, 1);
+    const p = baseParams();
+    const phase = getPhase();
+
+    if (!priceTable) return;
+
+    const out = planFromHoursRotation({ hours: H, phase, params: p, keyIst: 1/3 });
+
+    els.earnIst.textContent = fmt(out.totalIst, 2);
+
+    els.earnKeys.textContent =
+      `Keys: T=${fmt(out.keys.T, 2)} | H=${fmt(out.keys.H, 2)} | D=${fmt(out.keys.D, 2)} ` +
+      `(total=${fmt(out.keys.T + out.keys.H + out.keys.D, 2)})`;
+
+    els.earnRuns.textContent =
+      `Runs: Rc=${fmt(out.runs.runsC,0)} | Rs=${fmt(out.runs.runsS,0)} | Rn=${fmt(out.runs.runsN,0)}`;
+
+    els.earnTail.textContent =
+      `Tail: boss=${out.tail?.boss || "—"} | fractionalKey≈${fmt(out.tail?.fracKey ?? NaN, 3)} | tailRuns≈${fmt(out.tail?.runs ?? NaN, 2)}`;
+
+    els.earnBreakdown.textContent =
+      `Value: keys=${fmt(out.bankedKeyIst, 2)} Ist + extras=${fmt(out.extrasIst, 2)} Ist` +
+      ` | bonusPossible=${fmt(out.bonusPossibleIst, 2)} Ist` +
+      ` (VextraC≈${fmt(out.VextraC_regular + out.VextraC_bonus, 4)} Ist/runC)`;
+
+    els.earnRate.textContent =
+      `Predicted revenue/hour ≈ ${fmt(out.istPerHour, 3)} Ist/h`;
+
+    els.earnWarn.textContent =
+      `Deterministic planner: full steps follow C→S→N. Only ONE fractional key can appear in tail. Bonus is display-only.`;
+  }
+
+  await loadDefaults();
+
+  // initial compute
+  calcIst();
+  calcHours();
+
+  // buttons
+  els.calcIst.addEventListener("click", calcIst);
+  els.calcHours.addEventListener("click", calcHours);
+
+  // auto-recalc on changes
+  ["Dc","Ds","Dn","tC_min","tS_min","tN_min","phase","Y","H"].forEach(id => {
+    el(id).addEventListener("input", () => { calcIst(); calcHours(); });
+    el(id).addEventListener("change", () => { calcIst(); calcHours(); });
+  });
+</script>
 </body>
 </html>
