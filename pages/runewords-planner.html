@@ -162,7 +162,11 @@
     // formatting rules for UX
     const fmtHours = (x) => (Number.isFinite(x) ? x.toFixed(1) : "—");     // 1 decimal
     const fmtIst1  = (x) => (Number.isFinite(x) ? x.toFixed(1) : "—");     // 1 decimal
-    const asInt    = (x) => String(Math.max(0, Math.round(Number(x || 0)))); // integer count
+    //const asInt    = (x) => String(Math.max(0, Math.round(Number(x || 0)))); // integer count
+    function asInt(x) {
+      const n = Number(x ?? 0);
+      return String(Math.ceil(n));
+    }
 
     const els = {
       langSel: el("langSel"),
@@ -316,15 +320,17 @@
 
       add(t("boss.countess"), "planBoss");
       add(fmtHours(plan.hours.countess), "right");
-      add(String(plan.runs.countess), "right");
+      add(asInt(plan.runs.countess), "right");
+
 
       add(t("boss.summoner"), "planBoss");
       add(fmtHours(plan.hours.summoner), "right");
-      add(String(plan.runs.summoner), "right");
+      add(asInt(plan.runs.summoner), "right");
+
 
       add(t("boss.nihil"), "planBoss");
       add(fmtHours(plan.hours.nihl), "right");
-      add(String(plan.runs.nihl), "right");
+      add(asInt(plan.runs.nihl), "right");
 
       els.targetLine.textContent = t("planner.stopAt", { N: plan.keys.keysets });
     }
