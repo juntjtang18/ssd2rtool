@@ -487,8 +487,8 @@
       hint.textContent = t("planner.lowCostHint");
       els.planGrid.appendChild(hint);
 
-      // Put the same message on the stop line for extra visibility.
-      els.targetLine.textContent = t("planner.lowCostHint");
+      // Keep the stop line clean (avoid duplicate hint lines).
+      els.targetLine.textContent = "—";
 
       els.tradeList.textContent = "—";
 
@@ -518,14 +518,9 @@
       const b = renderRuneCost(rw, phase);
       const costIst = Number(b.totalIst || 0);
 
-      // cost=0 => show 0 plan
-      if (!(costIst > 0)) {
-        renderZeroState();
-        return;
-      }
-
-      // If the total cost is below 1 Ist, don't run the key pipeline planner.
-      if (costIst < 1) {
+      // If the total cost is below 1 Ist (including 0 due to unpriced low runes),
+      // don't run the key pipeline planner.
+      if (!(Number.isFinite(costIst)) || costIst < 1) {
         renderLowCostState();
         return;
       }
