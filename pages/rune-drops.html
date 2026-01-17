@@ -1,0 +1,287 @@
+<!doctype html>
+<!-- /pages/rune-drops.html -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SSD2R Tool - Boss Rune Drop Rates</title>
+  <style>
+    :root{
+      --bg:#0b1220; --text:#e7eefc; --muted:#9db0d1;
+      --accent:#65d2ff; --good:#8bffb1; --warn:#ffd38b; --bad:#ff8b8b;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    }
+    body{ margin:0; background:linear-gradient(180deg,#070c16,var(--bg)); color:var(--text); font-family:var(--sans); }
+    .wrap{ max-width:1200px; margin:24px auto; padding:0 16px; }
+    h1{ font-size:20px; margin:0 0 8px; }
+    .sub{ color:var(--muted); font-size:12px; line-height:1.45; }
+    .card{ background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:16px; box-shadow:0 12px 26px rgba(0,0,0,0.35); }
+
+    .controls{ display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+    .ctrl{ min-width:220px; }
+    label{ display:block; font-size:12px; color:var(--muted); margin:0 0 6px; }
+    select{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.22); color:var(--text); outline:none; }
+    .checkline{ display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.18); color:var(--muted); font-size:12px; }
+    .checkline input{ width:16px; height:16px; }
+    a{ color:var(--accent); text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    .tableWrap{ overflow:auto; border-radius:12px; border:1px solid rgba(255,255,255,0.06); }
+    table{ width:max-content; min-width:100%; border-collapse:separate; border-spacing:0; }
+    th, td{ padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.06); white-space:nowrap; }
+    th{ text-align:left; font-size:12px; color:var(--muted); font-weight:900; position:sticky; top:0; background:rgba(7,12,22,0.92); backdrop-filter: blur(6px); z-index:3; }
+    th.corner{ left:0; z-index:4; }
+    td{ font-size:12px; }
+    .mono{ font-family:var(--mono); }
+    .num{ text-align:right; font-family:var(--mono); }
+
+    td.sticky{ position:sticky; left:0; background:rgba(7,12,22,0.92); backdrop-filter: blur(6px); z-index:2; }
+    tr:hover td{ color:var(--accent); }
+
+    .runeBtn{ cursor:pointer; font-weight:900; }
+    .runeBtn .hint{ font-weight:700; color:var(--muted); margin-left:8px; }
+
+    .err{ font-size:12px; color:var(--bad); white-space:pre-wrap; }
+    .pillbar{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.18); font-size:12px; color:var(--muted); }
+    .pill strong{ color:var(--text); font-family:var(--mono); }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>Boss Rune Drop Rates</h1>
+    <div class="sub">
+      Table values are <span class="mono">expected drop count per kill</span> (not "chance of at least one").
+      Click a rune name (left column) to sort bosses by that rune.
+    </div>
+
+    <div class="card" style="margin-top:14px; margin-bottom:16px;">
+      <div class="controls">
+        <div class="ctrl">
+          <label>Display</label>
+          <select id="fmtSel">
+            <option value="perkill">Per kill (scientific)</option>
+            <option value="onein">1 in N (approx)</option>
+          </select>
+        </div>
+
+        <div class="ctrl">
+          <label>Rows</label>
+          <div class="checkline">
+            <input id="showAll" type="checkbox" />
+            <span>Show all runes from price table (otherwise: high runes only)</span>
+          </div>
+        </div>
+
+        <div class="ctrl" style="min-width:260px;">
+          <label>Dataset</label>
+          <div class="pillbar" id="metaPills"></div>
+        </div>
+      </div>
+
+      <div class="err" id="loadErr" style="display:none; margin-top:10px;"></div>
+      <div class="sub" style="margin-top:10px;">
+        <a href="../index.html">&lt;- Back</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="tableWrap">
+        <table>
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="sub" style="margin-top:10px;">
+        Tip: when a rune is selected for sorting, bosses are reordered left-to-right by that rune's drop rate.
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { loadPriceTable, normRune } from "../model/priceTable.js";
+    import { BOSSES, loadAllBossDrops, formatBossMeta } from "../model/rpk.js";
+
+    const el = (id) => document.getElementById(id);
+
+    const EXCLUDE = new Set(["PG","PA","FG","FA","UKEY"]);
+    const HIGH_RUNES = new Set(["VEX","OHM","LO","SUR","BER","JAH","CHAM","ZOD"]);
+    const PREFERRED_ORDER = ["RAL","TAL","HEL","UM","MAL","IST","VEX","OHM","LO","SUR","BER","JAH","CHAM","ZOD"];
+
+    let priceTable = null;
+    let bossesData = null; // [{id,label,data}, ...]
+
+    let showAll = false;
+    let fmtMode = "perkill"; // perk... or onein
+    let sortRune = null;
+    let sortDir = "desc";
+
+    function setErr(msg) {
+      const box = el("loadErr");
+      if (!msg) { box.style.display = "none"; box.textContent = ""; return; }
+      box.style.display = "block";
+      box.textContent = msg;
+    }
+
+    function unionPriceTableItems(pt) {
+      const out = new Set();
+      const phases = pt?.phases || {};
+      for (const phase of Object.values(phases)) {
+        if (!phase) continue;
+        for (const k of Object.keys(phase)) out.add(normRune(k));
+      }
+      for (const k of EXCLUDE) out.delete(k);
+      return out;
+    }
+
+    function buildRuneRows() {
+      const items = unionPriceTableItems(priceTable);
+      let list = Array.from(items);
+
+      if (!showAll) list = list.filter(r => HIGH_RUNES.has(r));
+
+      // Order: preferred list first, then any extras alphabetically.
+      const preferred = PREFERRED_ORDER.filter(r => list.includes(r));
+      const extra = list.filter(r => !PREFERRED_ORDER.includes(r)).sort();
+      return [...preferred, ...extra];
+    }
+
+    function buildBossOrder(runesMatrix) {
+      const base = [...BOSSES];
+      if (!sortRune) return base;
+
+      const r = sortRune;
+      base.sort((a, b) => {
+        const av = runesMatrix?.[a.id]?.[r] || 0;
+        const bv = runesMatrix?.[b.id]?.[r] || 0;
+        const d = bv - av;
+        return sortDir === "desc" ? d : -d;
+      });
+      return base;
+    }
+
+    function fmtPerKill(p) {
+      if (!(p > 0)) return "-";
+      // keep stable width-ish with 3 decimals
+      return Number(p).toExponential(3);
+    }
+
+    function fmtOneIn(p) {
+      if (!(p > 0)) return "-";
+      const n = 1 / Number(p);
+      if (!Number.isFinite(n)) return "-";
+      // big numbers: add separators, but keep as integer
+      return Math.round(n).toLocaleString("en-US");
+    }
+
+    function cellText(p) {
+      return fmtMode === "onein" ? fmtOneIn(p) : fmtPerKill(p);
+    }
+
+    function cellTitle(p) {
+      if (!(p > 0)) return "0";
+      const oneIn = 1 / p;
+      const oneInStr = Number.isFinite(oneIn) ? Math.round(oneIn).toLocaleString("en-US") : "-";
+      return `perKill=${p} | ~1 in ${oneInStr}`;
+    }
+
+    function buildMetaPills() {
+      const first = bossesData?.[0]?.data;
+      const meta = formatBossMeta(first);
+      const pills = [
+        `<span class="pill">dataset <strong>${meta || "-"}</strong></span>`,
+        `<span class="pill">bosses <strong>${BOSSES.length}</strong></span>`,
+        `<span class="pill">mode <strong>${fmtMode === "onein" ? "1 in N" : "perKill"}</strong></span>`,
+      ];
+      if (sortRune) pills.push(`<span class="pill">sorted <strong>${sortRune} ${sortDir === "desc" ? "down" : "up"}</strong></span>`);
+      el("metaPills").innerHTML = pills.join("");
+    }
+
+    function render() {
+      setErr(null);
+
+      const runes = buildRuneRows();
+
+      // matrix[bossId][rune] = perKill
+      const matrix = {};
+      for (const b of bossesData) {
+        const d = b?.data?.drops || {};
+        const m = {};
+        for (const r of runes) m[r] = Number(d[r] || d[normRune(r)] || 0);
+        matrix[b.id] = m;
+      }
+
+      const bossOrder = buildBossOrder(matrix);
+
+      // head
+      const thead = el("thead");
+      thead.innerHTML = "";
+      const hr = document.createElement("tr");
+      hr.innerHTML = `<th class="corner">Rune</th>` + bossOrder.map(b => `<th class="mono">${b.label}</th>`).join("");
+      thead.appendChild(hr);
+
+      // body
+      const tbody = el("tbody");
+      tbody.innerHTML = "";
+
+      for (const r of runes) {
+        const tr = document.createElement("tr");
+
+        const isSorted = sortRune === r;
+        const arrow = isSorted ? (sortDir === "desc" ? "v" : "^") : "";
+
+        const td0 = document.createElement("td");
+        td0.className = "sticky runeBtn mono";
+        td0.innerHTML = `${r} <span class="hint">${arrow}</span>`;
+        td0.title = "Click to sort bosses by this rune";
+        td0.onclick = () => {
+          if (sortRune === r) {
+            sortDir = (sortDir === "desc") ? "asc" : "desc";
+          } else {
+            sortRune = r;
+            sortDir = "desc";
+          }
+          buildMetaPills();
+          render();
+        };
+        tr.appendChild(td0);
+
+        for (const b of bossOrder) {
+          const p = matrix?.[b.id]?.[r] || 0;
+          const td = document.createElement("td");
+          td.className = "num";
+          td.textContent = cellText(p);
+          td.title = cellTitle(p);
+          tr.appendChild(td);
+        }
+
+        tbody.appendChild(tr);
+      }
+
+      buildMetaPills();
+    }
+
+    async function main() {
+      try {
+        priceTable = await loadPriceTable();
+        bossesData = await loadAllBossDrops(BOSSES);
+
+        // wire controls
+        el("showAll").checked = showAll;
+        el("showAll").onchange = (e) => { showAll = !!e.target.checked; sortRune = null; buildMetaPills(); render(); };
+
+        el("fmtSel").value = fmtMode;
+        el("fmtSel").onchange = (e) => { fmtMode = e.target.value; buildMetaPills(); render(); };
+
+        render();
+      } catch (err) {
+        setErr(String(err?.message || err));
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>
