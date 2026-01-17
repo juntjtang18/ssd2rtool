@@ -130,7 +130,7 @@
       const cycleMin = timePerKeyC + timePerKeyS + timePerKeyN;
 
       const extraNames = [...new Set((extras ?? []).map(x => String(x?.name ?? "").replace(/^BONUS\s*/i,"").trim()).filter(Boolean))];
-      const picks = ["RAL","HEL","TAL","PG","PA","FG","FA","IST","UM","MAL"].filter(x => (x in pd) || extraNames.includes(x));
+      const picks = ["RAL","HEL","TAL","PG","PA","FG","FA","IST","UM","MAL", "PUL"].filter(x => (x in pd) || extraNames.includes(x));
       const priceStr = picks.map(n => `${n}=${fmt(priceInIst(n, pd),4)}`).join(" · ");
 
       el("quickStats").innerHTML = [
