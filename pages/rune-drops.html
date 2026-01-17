@@ -107,8 +107,10 @@
     const el = (id) => document.getElementById(id);
 
     const EXCLUDE = new Set(["PG","PA","FG","FA","UKEY"]);
-    const HIGH_RUNES = new Set(["VEX","OHM","LO","SUR","BER","JAH","CHAM","ZOD"]);
-    const PREFERRED_ORDER = ["RAL","TAL","HEL","UM","MAL","IST","VEX","OHM","LO","SUR","BER","JAH","CHAM","ZOD"];
+    // Default view: high runes only (always include ZOD even if not priced).
+    const HIGH_RUNE_ROWS = ["VEX","OHM","LO","SUR","BER","JAH","CHAM","ZOD"];
+    // When showing all runes, we keep a reasonable ordering but also include anything else we see.
+    const PREFERRED_ORDER = ["EL","ELD","TIR","NEF","ETH","ITH","TAL","RAL","ORT","THUL","AMN","SOL","SHAEL","DOL","HEL","IO","LUM","KO","FAL","LEM","PUL","UM","MAL","IST","GUL","VEX","OHM","LO","SUR","BER","JAH","CHAM","ZOD"];
 
     let priceTable = null;
     let bossesData = null; // [{id,label,data}, ...]
@@ -125,24 +127,23 @@
       box.textContent = msg;
     }
 
-    function unionPriceTableItems(pt) {
-      const out = new Set();
-      const phases = pt?.phases || {};
-      for (const phase of Object.values(phases)) {
-        if (!phase) continue;
-        for (const k of Object.keys(phase)) out.add(normRune(k));
-      }
-      for (const k of EXCLUDE) out.delete(k);
-      return out;
-    }
-
     function buildRuneRows() {
-      const items = unionPriceTableItems(priceTable);
-      let list = Array.from(items);
+      // If not showing all: always show the high-rune rows, regardless of pricing.
+      if (!showAll) return [...HIGH_RUNE_ROWS];
 
-      if (!showAll) list = list.filter(r => HIGH_RUNES.has(r));
-
-      // Order: preferred list first, then any extras alphabetically.
+      // Show-all: union all rune keys observed in boss drop datasets.
+      const seen = new Set();
+      for (const b of (bossesData || [])) {
+        const d = b?.data?.drops || {};
+        for (const k of Object.keys(d)) {
+          const rk = normRune(k);
+          if (!rk || EXCLUDE.has(rk)) continue;
+          // keep only rune-looking keys (letters only)
+          if (!/^[A-Z]+$/.test(rk)) continue;
+          seen.add(rk);
+        }
+      }
+      let list = Array.from(seen);
       const preferred = PREFERRED_ORDER.filter(r => list.includes(r));
       const extra = list.filter(r => !PREFERRED_ORDER.includes(r)).sort();
       return [...preferred, ...extra];

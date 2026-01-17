@@ -117,20 +117,25 @@ def expected_counts_per_kill(root_tc: str, tcdict: Dict[str, Dict[str, str]], pl
     memo: Dict[str, Dict[str, float]] = {}
     picks = int(tcdict[root_tc].get("Picks") or 1)
 
-    # IMPORTANT: Act-boss treasure classes (Andariel/Mephisto/Diablo/Baal) in
-    # TreasureClassEx.txt often have Picks=7 with an explicit gold outcome like
-    # "gld,mul=...".
+    # IMPORTANT (dropcalc alignment):
+    # Act-boss treasure classes (Andariel/Mephisto/Diablo/Baal) in
+    # TreasureClassEx.txt commonly show Picks=7 with an explicit gold outcome
+    # like "gld,mul=...". Most popular calculators (e.g., dropcalc) report
+    # *item* drop rates for Act bosses using **6 item drops** (gold handled
+    # separately).
     #
-    # Most popular drop calculators report *item* drop rates for these bosses
-    # using 6 item drops (gold handled separately). If we keep Picks=7 here,
-    # every non-gold item rate becomes ~7/6 higher than those calculators.
+    # However, many *non-Act* superuniques (e.g., Summoner, Nihlathak) also
+    # have a gold outcome inside their TC, but calculators typically treat that
+    # as a normal outcome within the monster's picks (i.e., NOT a "free" extra
+    # gold roll).
     #
-    # To align our per-kill expected counts with dropcalc-style outputs, we
-    # subtract 1 pick when the root TC includes an explicit gold outcome.
+    # So we only apply the "Picks-1" adjustment for known Act bosses.
     if picks > 0:
         item1 = str(tcdict[root_tc].get("Item1") or "")
-        if item1.startswith("gld"):
-            picks = max(0, picks - 1)
+        if item1.startswith("gld") and picks == 7:
+            act_boss_prefixes = ("Andariel", "Duriel", "Mephisto", "Diablo", "Baal")
+            if root_tc.startswith(act_boss_prefixes):
+                picks = max(0, picks - 1)
 
     # Negative picks (Countess) are handled as a deterministic sequence of inner TCs.
     if picks < 0:
@@ -265,24 +270,25 @@ def main() -> None:
         leaf_counts = expected_counts_per_kill(tc, tcdict, args.players)
         econ = economy_bucketize(leaf_counts, code_to_name)
 
-        # keep only price-table keys (plus rune names already match)
-        econ = {k: float(v) for k, v in econ.items() if k in price}
+        # Keep ALL economy buckets + all runes we observed.
+        # (RPK calculation will later intersect with the active price table.)
+        econ = {k: float(v) for k, v in econ.items()}
 
         out_path = os.path.join(args.out_dir, f"boss.{out_name}.drops.json")
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump({"boss": out_name, "difficulty": args.difficulty, "players": args.players, "drops": econ}, f, indent=2, sort_keys=True)
 
-        summary.append((out_name, rpk_from_drops(econ, price)))
+        summary.append((out_name, rpk_from_drops({k: v for k, v in econ.items() if k in price}, price)))
 
     # Travincal (5 council members)
     council_tc = bosses["council"]
     council_leaf = expected_counts_per_kill(council_tc, tcdict, args.players)
     council_econ = economy_bucketize({k: v * 5 for k, v in council_leaf.items()}, code_to_name)
-    council_econ = {k: float(v) for k, v in council_econ.items() if k in price}
+    council_econ = {k: float(v) for k, v in council_econ.items()}
     out_path = os.path.join(args.out_dir, "boss.council5.drops.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump({"boss": "council5", "difficulty": args.difficulty, "players": args.players, "drops": council_econ}, f, indent=2, sort_keys=True)
-    summary.append(("council5", rpk_from_drops(council_econ, price)))
+    summary.append(("council5", rpk_from_drops({k: v for k, v in council_econ.items() if k in price}, price)))
 
     summary.sort(key=lambda x: x[1], reverse=True)
     print(f"RPK (Ist units) — expected value per kill (players={args.players}, diff={args.difficulty})")
