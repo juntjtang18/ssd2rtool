@@ -52,6 +52,17 @@
     td { padding: 8px 0; border-bottom: 1px solid #1c2735; }
     .k { color: var(--accent); font-weight: 900; }
     .muted { color: var(--muted); }
+
+
+    details { margin-top: 10px; }
+    summary { cursor: pointer; color: var(--muted); font-weight: 900; font-size: 13px; }
+    summary::-webkit-details-marker { display: none; }
+    summary:before { content: '▸ '; color: var(--muted); }
+    details[open] summary:before { content: '▾ '; }
+
+    .btnGhost { width: auto; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-weight: 800; cursor:pointer; }
+    .btnGhost:hover { border-color: #2f4a63; }
+
   </style>
 </head>
 
@@ -99,6 +110,31 @@
         </div>
 
         <button class="btn" id="calc" data-i18n="btn.calc">Calculate</button>
+
+        <details id="runtimeDetails">
+          <summary data-i18n="inputs.runtimeSummary">Customize run times (minutes)</summary>
+
+          <div class="row" style="margin-top:10px;">
+            <label data-i18n="inputs.runtime.countess">Countess run (min)</label>
+            <input id="tC" type="number" step="0.1" min="0" />
+          </div>
+
+          <div class="row">
+            <label data-i18n="inputs.runtime.summoner">Summoner run (min)</label>
+            <input id="tS" type="number" step="0.1" min="0" />
+          </div>
+
+          <div class="row">
+            <label data-i18n="inputs.runtime.nihil">Nihlathak run (min)</label>
+            <input id="tN" type="number" step="0.1" min="0" />
+          </div>
+
+          <div class="row" style="justify-content:space-between;">
+            <div class="tiny muted" data-i18n="inputs.runtimeNote">Saved locally in your browser.</div>
+            <button type="button" class="btnGhost" id="resetTimes" data-i18n="inputs.runtimeReset">Reset</button>
+          </div>
+        </details>
+
 
         <div class="tiny" style="margin-top:10px;">
           <a href="../index.html" data-i18n="nav.back">← Back</a> &nbsp;|&nbsp;
@@ -184,6 +220,12 @@
       dropsTable: el("dropsTable"),
       totalCost: el("totalCost"),
       breakdownTable: el("breakdownTable"),
+
+      runtimeDetails: el("runtimeDetails"),
+      tC: el("tC"),
+      tS: el("tS"),
+      tN: el("tN"),
+      resetTimes: el("resetTimes"),
     };
 
     let priceTable = null;
@@ -508,6 +550,63 @@
       })());
     }
 
+
+
+    // --- Runtime customization (per-boss minutes/run) ---
+    // Stored in localStorage so users can tune the planner to their own routing/speed.
+    const RT_KEYS = {
+      tC_min: "rt_tC_min",
+      tS_min: "rt_tS_min",
+      tN_min: "rt_tN_min",
+    };
+
+    function readPositiveNumber(x, fallback) {
+      const n = Number(x);
+      return Number.isFinite(n) && n > 0 ? n : fallback;
+    }
+
+    function loadRuntimeOverridesIntoInputs() {
+      // default to model-parameters.json values
+      const tC = readPositiveNumber(localStorage.getItem(RT_KEYS.tC_min), Number(modelDefaults.tC_min));
+      const tS = readPositiveNumber(localStorage.getItem(RT_KEYS.tS_min), Number(modelDefaults.tS_min));
+      const tN = readPositiveNumber(localStorage.getItem(RT_KEYS.tN_min), Number(modelDefaults.tN_min));
+
+      els.tC.value = String(tC);
+      els.tS.value = String(tS);
+      els.tN.value = String(tN);
+    }
+
+    function saveRuntimeOverridesFromInputs() {
+      const tC = readPositiveNumber(els.tC.value, Number(modelDefaults.tC_min));
+      const tS = readPositiveNumber(els.tS.value, Number(modelDefaults.tS_min));
+      const tN = readPositiveNumber(els.tN.value, Number(modelDefaults.tN_min));
+
+      localStorage.setItem(RT_KEYS.tC_min, String(tC));
+      localStorage.setItem(RT_KEYS.tS_min, String(tS));
+      localStorage.setItem(RT_KEYS.tN_min, String(tN));
+
+      // normalize UI
+      els.tC.value = String(tC);
+      els.tS.value = String(tS);
+      els.tN.value = String(tN);
+    }
+
+    function resetRuntimeOverrides() {
+      localStorage.removeItem(RT_KEYS.tC_min);
+      localStorage.removeItem(RT_KEYS.tS_min);
+      localStorage.removeItem(RT_KEYS.tN_min);
+      loadRuntimeOverridesIntoInputs();
+    }
+
+    function getParamsWithRuntimeOverrides() {
+      // Start from defaults, then override times
+      const params = { ...modelDefaults };
+      params.tC_min = readPositiveNumber(els.tC.value, Number(modelDefaults.tC_min));
+      params.tS_min = readPositiveNumber(els.tS.value, Number(modelDefaults.tS_min));
+      params.tN_min = readPositiveNumber(els.tN.value, Number(modelDefaults.tN_min));
+      return params;
+    }
+
     function calc() {
       const phase = els.phase.value;
       localStorage.setItem("seasonPhase", phase);
@@ -529,7 +628,7 @@
         targetIst: costIst,
         phase,
         priceTable,
-        params: modelDefaults,
+        params: getParamsWithRuntimeOverrides(),
         buffer: 1.0
       });
 
@@ -545,6 +644,8 @@
     runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
 
+    loadRuntimeOverridesIntoInputs();
+
     setPhaseDefault();
     renderRunewordOptions();
 
@@ -556,6 +657,13 @@
     els.phase.addEventListener("change", calc);
     els.rw.addEventListener("change", calc);
     els.q.addEventListener("input", () => { renderRunewordOptions(); calc(); });
+
+    // runtime overrides
+    const rtChanged = () => { saveRuntimeOverridesFromInputs(); calc(); };
+    els.tC.addEventListener("change", rtChanged);
+    els.tS.addEventListener("change", rtChanged);
+    els.tN.addEventListener("change", rtChanged);
+    els.resetTimes.addEventListener("click", () => { resetRuntimeOverrides(); calc(); });
 
     calc();
   </script>
