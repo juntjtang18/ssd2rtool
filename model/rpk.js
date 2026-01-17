@@ -25,9 +25,14 @@ async function fetchJson(url) {
   return res.json();
 }
 
-export async function loadBossDrops(bossId) {
-  const url = new URL(`../config/boss_drops/boss.${bossId}.drops.json`, import.meta.url);
+export async function loadBossDropsByFileId(fileId) {
+  const url = new URL(`../config/boss_drops/boss.${fileId}.drops.json`, import.meta.url);
   return fetchJson(url.href);
+}
+
+// Backwards-compatible: bossId maps directly to fileId.
+export async function loadBossDrops(bossId) {
+  return loadBossDropsByFileId(bossId);
 }
 
 export async function loadAllBossDrops(bosses = BOSSES) {
