@@ -130,12 +130,21 @@ def expected_counts_per_kill(root_tc: str, tcdict: Dict[str, Dict[str, str]], pl
     # gold roll).
     #
     # So we only apply the "Picks-1" adjustment for known Act bosses.
-    if picks > 0:
-        item1 = str(tcdict[root_tc].get("Item1") or "")
-        if item1.startswith("gld") and picks == 7:
-            act_boss_prefixes = ("Andariel", "Duriel", "Mephisto", "Diablo", "Baal")
-            if root_tc.startswith(act_boss_prefixes):
-                picks = max(0, picks - 1)
+    if picks > 0 and picks == 7:
+        # IMPORTANT (dropcalc alignment): Act-boss TCs (and their quest-drop variants)
+        # effectively produce 6 item drops + a separate gold roll. Many calculators
+        # (e.g., DropCalc) report the *item* drop rates using 6, even if the TC's
+        # Picks field is 7.
+        #
+        # Using only "Item1 starts with gld" as the trigger is insufficient for
+        # quest-drop tables like Andarielq, where the first outcomes are equipment
+        # TCs, but the same 6-item convention still applies.
+        act_boss_prefixes = (
+            "Andariel", "Duriel", "Mephisto", "Diablo", "Baal",
+            "Andarielq", "Durielq", "Mephistoq", "Diabloq", "Baalq",
+        )
+        if root_tc.startswith(act_boss_prefixes):
+            picks = max(0, picks - 1)
 
     # Negative picks (Countess) are handled as a deterministic sequence of inner TCs.
     if picks < 0:
@@ -256,7 +265,9 @@ def main() -> None:
         "diablo": f"Diablo{diff_suffix}",
         "baal": f"Baal{diff_suffix}",
         "mephisto": f"Mephisto{diff_suffix}",
-        "andariel": f"Andariel{diff_suffix}",
+        # Treat Andariel's quest-drop table as the standard farming baseline.
+        # (In D2R this is effectively "always on" for practical farming.)
+        "andariel": f"Andarielq{diff_suffix}",
         "nihl": f"Nihlathak{diff_suffix}",
         "countess": f"Countess{diff_suffix}",
         "summoner": f"Summoner{diff_suffix}",
