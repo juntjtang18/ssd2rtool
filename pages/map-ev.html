@@ -43,33 +43,15 @@
     </div>
 
     <div class="card" style="margin-top:14px;">
-      <div class="row" style="grid-template-columns: 1fr 1fr 1fr;">
+      <div class="row" style="grid-template-columns: 1fr 2fr; align-items:end;">
         <div>
           <label>Price phase</label>
           <select id="phaseSel"></select>
           <div class="small">/config/rune-price-table.json</div>
         </div>
-        <div>
-          <label>Run preset</label>
-          <select id="presetSel"></select>
-          <div class="small">/config/map_runs/*.run.json</div>
-        </div>
-        <div>
-          <label>Quick edit (this session only)</label>
-          <div class="small">Overrides only affect the table below (no file write).</div>
-        </div>
-      </div>
-      <div class="row" style="grid-template-columns: 1fr 1fr 1fr; margin-top:10px;">
-        <div>
-          <label>killPct</label>
-          <input id="killPct" type="number" min="0" max="1" step="0.01" value="0.1" />
-        </div>
-        <div>
-          <label>secondsPerRun</label>
-          <input id="secondsPerRun" type="number" min="1" step="1" value="120" />
-        </div>
-        <div>
-          <button class="btn" id="btnRecalc">Recalculate</button>
+        <div class="small" style="padding-bottom:10px;">
+          Defaults come from <span class="mono">/config/map_runs/*.run.json</span>.
+          Click <span class="mono">⚙️</span> on a map to customize <span class="mono">killPct</span> and <span class="mono">minutes/run</span> (saved in your browser).
         </div>
       </div>
       <div id="loadErr" class="err" style="display:none; margin-top:10px;"></div>
@@ -79,14 +61,14 @@
     <div class="row" style="margin-top:16px;">
       <div class="card">
         <h2>EV leaderboard</h2>
-        <div class="small">Sorted by Ist/hour using the current killPct + time override.</div>
+        <div class="small">Sorted by Ist/hour using each map’s own run settings.</div>
         <div style="overflow:auto; margin-top:10px;">
           <table id="tbl"></table>
         </div>
       </div>
       <div class="card">
-        <h2>Breakdown (selected)</h2>
-        <div class="small">Top contributors by IST/run (currency-only).</div>
+        <h2>Details</h2>
+        <div class="small">Top contributors by IST/run (currency-only) + per-map settings.</div>
         <div id="detail" style="margin-top:10px;"></div>
       </div>
     </div>
@@ -129,29 +111,66 @@
       el("phaseSel").addEventListener("change", () => { phaseKey = el("phaseSel").value; render(); });
     }
 
-    function buildPresetSel(maps) {
-      el("presetSel").innerHTML = maps.map(m => `<option value="${m.mapId}">${m.name}</option>`).join("");
-      el("presetSel").addEventListener("change", () => { syncPresetInputs(); render(); });
+    const OV_KEY = "ssd2rtool.mapRunOverrides.hell.p1.v1";
+    let overrides = {};
+    let selectedMapId = null;
+    let editOpenFor = null;
+
+    function loadOverrides() {
+      try {
+        const raw = localStorage.getItem(OV_KEY);
+        overrides = raw ? JSON.parse(raw) : {};
+      } catch {
+        overrides = {};
+      }
     }
 
-    function syncPresetInputs() {
-      const mapId = el("presetSel").value;
+    function saveOverrides() {
+      try {
+        localStorage.setItem(OV_KEY, JSON.stringify(overrides));
+      } catch {
+        // ignore
+      }
+    }
+
+    function deepMergeRun(baseRun, ov) {
+      const out = JSON.parse(JSON.stringify(baseRun ?? {}));
+      if (!ov) return out;
+      // shallow merge top-level
+      for (const [k, v] of Object.entries(ov)) {
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          out[k] = { ...(out[k] ?? {}), ...v };
+        } else {
+          out[k] = v;
+        }
+      }
+      // deep-ish merge for known nested objects
+      out.time = { ...(baseRun?.time ?? {}), ...(ov.time ?? {}) };
+      out.killModel = { ...(baseRun?.killModel ?? {}), ...(ov.killModel ?? {}) };
+      out.guaranteed = { ...(baseRun?.guaranteed ?? {}), ...(ov.guaranteed ?? {}) };
+      out.guaranteed.tcSet = { ...(baseRun?.guaranteed?.tcSet ?? {}), ...(ov.guaranteed?.tcSet ?? {}) };
+      out.guaranteed.tcAdd = { ...(baseRun?.guaranteed?.tcAdd ?? {}), ...(ov.guaranteed?.tcAdd ?? {}) };
+
+      // Back-compat: if secondsPerRun exists, convert to minutesPerRun
+      if (out.time && out.time.minutesPerRun == null && out.time.secondsPerRun != null) {
+        const s = Number(out.time.secondsPerRun);
+        if (Number.isFinite(s) && s > 0) out.time.minutesPerRun = +(s / 60).toFixed(2);
+      }
+      return out;
+    }
+
+    function getEffectiveRunCfg(mapId) {
       const b = bundles.get(mapId);
-      if (!b) return;
-
-      const killPct = Number(b.run?.killModel?.killPct ?? 1);
-      const seconds = Number(b.run?.time?.secondsPerRun ?? 0);
-
-      el("killPct").value = String(Number.isFinite(killPct) ? killPct : 1);
-      el("secondsPerRun").value = String(Number.isFinite(seconds) && seconds > 0 ? seconds : 120);
+      if (!b) return {};
+      return deepMergeRun(b.run, overrides[mapId]);
     }
 
     function pillsForSelected() {
-      const mapId = el("presetSel").value;
+      const mapId = selectedMapId;
       const b = bundles.get(mapId);
       if (!b) return;
       const m = b.map;
-      const r = b.run;
+      const r = getEffectiveRunCfg(mapId);
       const miss = (m.tcMissingInTcDropTable ?? []).length;
       const extra = [];
       if (miss) extra.push(`missing TC in drop table: ${miss}`);
@@ -172,56 +191,101 @@
 
       const miss = (row.missingTc ?? []).length;
 
+      const isEditing = editOpenFor === row.mapId;
+      const runCfg = getEffectiveRunCfg(row.mapId);
+      const minutesPerRun = Number(runCfg?.time?.minutesPerRun ?? row.minutesPerRun ?? 0);
+      const killPct = Number(runCfg?.killModel?.killPct ?? row.killPct ?? 1);
+
       el("detail").innerHTML = `
         <div class="pill">selected <strong>${row.name}</strong></div>
-        <div class="pill">EV/run <strong>${fmt(row.istPerRun,3)}</strong> IST</div>
-        <div class="pill">EV/hour <strong>${fmt(row.istPerHour,3)}</strong> IST</div>
-        <div class="pill">seconds/run <strong>${fmt(row.secondsPerRun,0)}</strong></div>
-        <div class="pill">killPct <strong>${fmt(row.killPct,2)}</strong></div>
+        <div class="pill">EV/run <strong>${fmt(row.istPerRun,6)}</strong> IST</div>
+        <div class="pill">EV/hour <strong>${fmt(row.istPerHour,4)}</strong> IST</div>
+        <div class="pill">min/run <strong>${fmt(minutesPerRun,2)}</strong></div>
+        <div class="pill">killPct <strong>${fmt(killPct,2)}</strong></div>
         ${miss ? `<div class="pill" style="color:var(--warn)">missing TC <strong>${miss}</strong></div>` : ""}
-        <div style="margin-top:10px;" class="small">Top item contributors (IST/run):</div>
+
+        <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div class="small">Per-map settings</div>
+          <button class="btn" id="btnToggleEdit" style="width:auto; padding:8px 10px; border-radius:12px;">${isEditing ? "Close" : "Edit"}</button>
+        </div>
+
+        ${isEditing ? `
+          <div style="margin-top:10px;">
+            <label>killPct (0–1)</label>
+            <input id="editKillPct" type="number" min="0" max="1" step="0.01" value="${fmt(killPct,2)}" />
+            <label>minutes per run</label>
+            <input id="editMinutes" type="number" min="0.1" step="0.1" value="${fmt(minutesPerRun,2)}" />
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
+              <button class="btn" id="btnSave" style="margin-top:0;">Save</button>
+              <button class="btn" id="btnReset" style="margin-top:0; background:rgba(255,255,255,0.10); color:var(--text); border:1px solid rgba(255,255,255,0.12);">Reset</button>
+            </div>
+            <div class="small" style="margin-top:8px;">Saved to your browser only (localStorage). Does not modify JSON files.</div>
+          </div>
+        ` : `<div class="small" style="margin-top:10px;">Tip: click <span class="mono">Edit</span> to change <span class="mono">killPct</span> and <span class="mono">minutes/run</span> for this map.</div>`}
+
+        <div style="margin-top:14px;" class="small">Top item contributors (IST/run):</div>
         <table style="margin-top:6px; width:100%; border-collapse:collapse;">
           <tr><th>Item</th><th class="right">IST/run</th></tr>
           ${items.map(([k,v])=>`<tr><td class="mono">${k}</td><td class="mono right">${fmt(v,6)}</td></tr>`).join("")}
         </table>
-        ${items.length ? "" : `<div class="small" style="margin-top:8px; color:var(--warn)">No priced items found in this run (check killPct / tables).</div>`}
+        ${items.length ? "" : `<div class="small" style="margin-top:8px; color:var(--warn)">No priced items found in this run (check tables).</div>`}
       `;
+
+      // wire editor buttons
+      const btnToggle = document.getElementById("btnToggleEdit");
+      if (btnToggle) {
+        btnToggle.addEventListener("click", () => {
+          editOpenFor = isEditing ? null : row.mapId;
+          render();
+        });
+      }
+      const btnSave = document.getElementById("btnSave");
+      if (btnSave) {
+        btnSave.addEventListener("click", () => {
+          const k = Number(document.getElementById("editKillPct")?.value);
+          const m = Number(document.getElementById("editMinutes")?.value);
+          const ov = overrides[row.mapId] ?? {};
+          ov.killModel = { ...(ov.killModel ?? {}), killPct: Number.isFinite(k) ? Math.max(0, Math.min(1, k)) : killPct };
+          ov.time = { ...(ov.time ?? {}), minutesPerRun: Number.isFinite(m) ? Math.max(0.1, m) : minutesPerRun };
+          overrides[row.mapId] = ov;
+          saveOverrides();
+          render();
+        });
+      }
+      const btnReset = document.getElementById("btnReset");
+      if (btnReset) {
+        btnReset.addEventListener("click", () => {
+          delete overrides[row.mapId];
+          saveOverrides();
+          render();
+        });
+      }
     }
 
     function render() {
       setErr(null);
       pillsForSelected();
-
-      // apply session overrides
-      const overrideKillPct = Number(el("killPct").value);
-      const overrideSeconds = Number(el("secondsPerRun").value);
-
       const rows = [];
 
       for (const m of idx.maps) {
         const b = bundles.get(m.mapId);
         if (!b) continue;
 
-        // clone run config shallowly and apply overrides
-        const run = JSON.parse(JSON.stringify(b.run));
-        run.killModel = run.killModel ?? {};
-        if (Number.isFinite(overrideKillPct) && overrideKillPct >= 0) run.killModel.killPct = overrideKillPct;
-        run.time = run.time ?? {};
-        if (Number.isFinite(overrideSeconds) && overrideSeconds > 0) run.time.secondsPerRun = overrideSeconds;
+        const run = getEffectiveRunCfg(m.mapId);
 
         const runTcCounts = deriveRunTcCounts(b.map.tcCounts ?? {}, run);
         const phaseData = currentPhaseData(b.priceTable);
         const ev = computeMapEvIst({ runTcCounts, tcDropTable: b.tcDrop, phaseData });
-        const secondsPerRun = Number(run.time?.secondsPerRun ?? 0);
+        const minutesPerRun = Number(run.time?.minutesPerRun ?? 0);
         const istPerRun = ev.totalIstPerRun;
-        const istPerHour = computePerHour(istPerRun, secondsPerRun);
+        const istPerHour = computePerHour(istPerRun, minutesPerRun);
 
         rows.push({
           mapId: m.mapId,
           name: m.name,
           istPerRun,
           istPerHour,
-          secondsPerRun,
+          minutesPerRun,
           killPct: Number(run.killModel?.killPct ?? 1),
           byItemIst: ev.byItemIst,
           missingTc: ev.missingTc
@@ -234,38 +298,49 @@
       tbl.innerHTML = `
         <tr>
           <th>Map</th>
+          <th></th>
           <th class="right">IST/run</th>
           <th class="right">IST/hour</th>
-          <th class="right">sec/run</th>
+          <th class="right">min/run</th>
           <th class="right">killPct</th>
         </tr>
         ${rows.map(r => `
           <tr data-id="${r.mapId}" style="cursor:pointer">
             <td>${r.name}</td>
+            <td class="right"><button data-gear="${r.mapId}" title="Edit" style="cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:var(--text); border-radius:10px; padding:6px 9px;">⚙️</button></td>
             <td class="mono right">${fmt(r.istPerRun,6)}</td>
             <td class="mono right">${fmt(r.istPerHour,4)}</td>
-            <td class="mono right">${fmt(r.secondsPerRun,0)}</td>
+            <td class="mono right">${fmt(r.minutesPerRun,2)}</td>
             <td class="mono right">${fmt(r.killPct,2)}</td>
           </tr>
         `).join("")}
       `;
 
-      // row click
-      for (const tr of tbl.querySelectorAll("tr[data-id]")) {
-        tr.addEventListener("click", () => {
+      // event delegation for row clicks + gear buttons
+      tbl.querySelectorAll("tr[data-id]").forEach(tr => {
+        tr.addEventListener("click", (evt) => {
+          const gear = evt.target?.closest?.("button[data-gear]");
           const id = tr.getAttribute("data-id");
+          if (!id) return;
+          selectedMapId = id;
+          if (gear) {
+            editOpenFor = id;
+          } else {
+            editOpenFor = null;
+          }
+          pillsForSelected();
           const row = rows.find(x => x.mapId === id);
           renderDetail(row);
         });
-      }
+      });
 
-      // default detail: currently selected preset
-      const cur = rows.find(x => x.mapId === el("presetSel").value);
-      renderDetail(cur ?? rows[0] ?? null);
+      const cur = rows.find(x => x.mapId === selectedMapId) ?? rows[0] ?? null;
+      renderDetail(cur);
     }
 
     async function main() {
       try {
+        loadOverrides();
         const r = await loadMapEvIndex();
         idx = r.index;
 
@@ -280,12 +355,7 @@
         const first = bundles.get(idx.maps[0].mapId);
         buildPhaseSel(first.priceTable);
 
-        buildPresetSel(idx.maps);
-        el("presetSel").value = idx.maps[0].mapId;
-        syncPresetInputs();
-
-        el("btnRecalc").addEventListener("click", () => render());
-
+        selectedMapId = idx.maps[0].mapId;
         render();
       } catch (e) {
         setErr(String(e?.stack ?? e));

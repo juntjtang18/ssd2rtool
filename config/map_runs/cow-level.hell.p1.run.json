@@ -2,8 +2,18 @@
   "schemaVersion": "1.0",
   "mapId": "cow-level",
   "label": "Cow farm (partial)",
-  "assumptions": { "difficulty": "hell", "players": 1, "party": 1 },
-  "time": { "secondsPerRun": 240 },
-  "killModel": { "killPct": 0.5 },
-  "guaranteed": { "tcSet": {} }
+  "assumptions": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1
+  },
+  "time": {
+    "minutesPerRun": 4.0
+  },
+  "killModel": {
+    "killPct": 0.5
+  },
+  "guaranteed": {
+    "tcSet": {}
+  }
 }

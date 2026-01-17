@@ -2,8 +2,20 @@
   "schemaVersion": "1.0",
   "mapId": "nilh-halls",
   "label": "Nihl key run",
-  "assumptions": { "difficulty": "hell", "players": 1, "party": 1 },
-  "time": { "secondsPerRun": 120 },
-  "killModel": { "killPct": 0.04 },
-  "guaranteed": { "tcSet": { "Nihlathak (H)": 1 } }
+  "assumptions": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1
+  },
+  "time": {
+    "minutesPerRun": 2.0
+  },
+  "killModel": {
+    "killPct": 0.04
+  },
+  "guaranteed": {
+    "tcSet": {
+      "Nihlathak (H)": 1
+    }
+  }
 }

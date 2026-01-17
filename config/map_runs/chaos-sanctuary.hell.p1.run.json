@@ -2,8 +2,20 @@
   "schemaVersion": "1.0",
   "mapId": "chaos-sanctuary",
   "label": "Seal run (approx)",
-  "assumptions": { "difficulty": "hell", "players": 1, "party": 1 },
-  "time": { "secondsPerRun": 180 },
-  "killModel": { "killPct": 0.45 },
-  "guaranteed": { "tcSet": { "Diablo (H)": 1 } }
+  "assumptions": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1
+  },
+  "time": {
+    "minutesPerRun": 3.0
+  },
+  "killModel": {
+    "killPct": 0.45
+  },
+  "guaranteed": {
+    "tcSet": {
+      "Diablo (H)": 1
+    }
+  }
 }

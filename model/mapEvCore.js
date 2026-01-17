@@ -1,7 +1,7 @@
 // /model/mapEvCore.js
 // Map EV model (currency-only):
 //   EV_run = sum_tc( N_tc * sum_item( V_item * P_tc_item ) )
-//   EV_hour = EV_run * 3600 / secondsPerRun
+//   EV_hour = EV_run * 60 / minutesPerRun
 //
 // Inputs:
 //  - /config/rune-price-table.json (phase-based pricing; V_item in Ist)
@@ -140,8 +140,8 @@ export function computeMapEvIst({ runTcCounts, tcDropTable, phaseData }) {
   return { totalIstPerRun: total, byItemIst: byItem, missingTc };
 }
 
-export function computePerHour(totalIstPerRun, secondsPerRun) {
-  const s = Number(secondsPerRun ?? 0);
-  if (!(s > 0)) return 0;
-  return totalIstPerRun * (3600 / s);
+export function computePerHour(totalIstPerRun, minutesPerRun) {
+  const m = Number(minutesPerRun ?? 0);
+  if (!(m > 0)) return 0;
+  return totalIstPerRun * (60 / m);
 }

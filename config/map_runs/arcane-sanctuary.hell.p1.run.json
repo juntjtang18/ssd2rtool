@@ -2,8 +2,20 @@
   "schemaVersion": "1.0",
   "mapId": "arcane-sanctuary",
   "label": "Summoner rush",
-  "assumptions": { "difficulty": "hell", "players": 1, "party": 1 },
-  "time": { "secondsPerRun": 120 },
-  "killModel": { "killPct": 0.06 },
-  "guaranteed": { "tcSet": { "Summoner (H)": 1 } }
+  "assumptions": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1
+  },
+  "time": {
+    "minutesPerRun": 2.0
+  },
+  "killModel": {
+    "killPct": 0.06
+  },
+  "guaranteed": {
+    "tcSet": {
+      "Summoner (H)": 1
+    }
+  }
 }

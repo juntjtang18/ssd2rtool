@@ -2,8 +2,20 @@
   "schemaVersion": "1.0",
   "mapId": "catacombs-4",
   "label": "Andariel rush",
-  "assumptions": { "difficulty": "hell", "players": 1, "party": 1 },
-  "time": { "secondsPerRun": 72 },
-  "killModel": { "killPct": 0.04 },
-  "guaranteed": { "tcSet": { "Andarielq (H)": 1 } }
+  "assumptions": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1
+  },
+  "time": {
+    "minutesPerRun": 1.2
+  },
+  "killModel": {
+    "killPct": 0.04
+  },
+  "guaranteed": {
+    "tcSet": {
+      "Andarielq (H)": 1
+    }
+  }
 }
