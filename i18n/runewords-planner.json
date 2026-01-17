@@ -26,7 +26,13 @@
     "boss.countess": "Hell Countess",
     "boss.summoner": "Hell Summoner",
     "boss.nihil": "Hell Nihlathak",
-    "total": "Total"
+    "total": "Total",
+    "inputs.runtimeSummary": "Customize run times (minutes)",
+    "inputs.runtime.countess": "Countess run (min)",
+    "inputs.runtime.summoner": "Summoner run (min)",
+    "inputs.runtime.nihil": "Nihlathak run (min)",
+    "inputs.runtimeNote": "Saved locally in your browser.",
+    "inputs.runtimeReset": "Reset"
   },
   "zh-Hant": {
     "title": "SSD2R 工具 — 符文之語規劃器",
@@ -55,7 +61,13 @@
     "boss.countess": "地獄 女伯爵",
     "boss.summoner": "地獄 召喚者",
     "boss.nihil": "地獄 尼拉塞克",
-    "total": "總計"
+    "total": "總計",
+    "inputs.runtimeSummary": "自訂三王平均用時（分鐘）",
+    "inputs.runtime.countess": "Countess 平均用時(min)：",
+    "inputs.runtime.summoner": "Summoner 平均用時(min)：",
+    "inputs.runtime.nihil": "Nihlathak 平均用時(min)：",
+    "inputs.runtimeNote": "只會存到你的瀏覽器（localStorage）。",
+    "inputs.runtimeReset": "重設為預設"
   },
   "zh-Hans": {
     "title": "SSD2R 工具 — 符文之语规划器",
@@ -84,6 +96,12 @@
     "boss.countess": "地狱 女伯爵",
     "boss.summoner": "地狱 召唤者",
     "boss.nihil": "地狱 尼拉塞克",
-    "total": "总计"
+    "total": "总计",
+    "inputs.runtimeSummary": "自定义三王平均用时（分钟）",
+    "inputs.runtime.countess": "Countess 平均用时(min)：",
+    "inputs.runtime.summoner": "Summoner 平均用时(min)：",
+    "inputs.runtime.nihil": "Nihlathak 平均用时(min)：",
+    "inputs.runtimeNote": "只会保存在你的浏览器（localStorage）。",
+    "inputs.runtimeReset": "重置为默认"
   }
 }
