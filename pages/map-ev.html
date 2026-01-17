@@ -80,7 +80,7 @@
       loadMapEvBundle,
       getPhaseOptions,
       deriveRunTcCounts,
-      computeMapEvIst,
+      computeMapEvModel,
       computePerHour
     } from "../model/mapEvCore.js";
 
@@ -189,6 +189,10 @@
         .sort((a,b)=>b[1]-a[1])
         .slice(0, 12);
 
+      const vexRows = Object.entries(row.vexPlusExpected ?? {})
+        .sort((a,b)=>b[1]-a[1])
+        .filter(([,v])=>Number(v || 0) > 0);
+
       const miss = (row.missingTc ?? []).length;
 
       const isEditing = editOpenFor === row.mapId;
@@ -200,6 +204,7 @@
         <div class="pill">selected <strong>${row.name}</strong></div>
         <div class="pill">EV/run <strong>${fmt(row.istPerRun,6)}</strong> IST</div>
         <div class="pill">EV/hour <strong>${fmt(row.istPerHour,4)}</strong> IST</div>
+        <div class="pill">Vex+ prob/run <strong>${fmt((row.vexPlusProb ?? 0)*100,2)}%</strong></div>
         <div class="pill">min/run <strong>${fmt(minutesPerRun,2)}</strong></div>
         <div class="pill">killPct <strong>${fmt(killPct,2)}</strong></div>
         ${miss ? `<div class="pill" style="color:var(--warn)">missing TC <strong>${miss}</strong></div>` : ""}
@@ -229,6 +234,12 @@
           ${items.map(([k,v])=>`<tr><td class="mono">${k}</td><td class="mono right">${fmt(v,6)}</td></tr>`).join("")}
         </table>
         ${items.length ? "" : `<div class="small" style="margin-top:8px; color:var(--warn)">No priced items found in this run (check tables).</div>`}
+
+        <div style="margin-top:14px;" class="small">Vex+ lottery (expected count per run; used as prob approximation):</div>
+        <table style="margin-top:6px; width:100%; border-collapse:collapse;">
+          <tr><th>Rune</th><th class="right">Expected/run</th></tr>
+          ${vexRows.length ? vexRows.map(([k,v])=>`<tr><td class="mono">${k}</td><td class="mono right">${fmt(v,8)}</td></tr>`).join("") : `<tr><td colspan="2" class="small" style="color:var(--muted)">No Vex+ probability found in this run (check TC table).</td></tr>`}
+        </table>
       `;
 
       // wire editor buttons
@@ -275,10 +286,11 @@
 
         const runTcCounts = deriveRunTcCounts(b.map.tcCounts ?? {}, run);
         const phaseData = currentPhaseData(b.priceTable);
-        const ev = computeMapEvIst({ runTcCounts, tcDropTable: b.tcDrop, phaseData });
+        const ev = computeMapEvModel({ runTcCounts, tcDropTable: b.tcDrop, phaseData });
         const minutesPerRun = Number(run.time?.minutesPerRun ?? 0);
-        const istPerRun = ev.totalIstPerRun;
+        const istPerRun = ev.predictable.istPerRun;
         const istPerHour = computePerHour(istPerRun, minutesPerRun);
+        const vexPlusProb = ev.lottery.vexPlusProb;
 
         rows.push({
           mapId: m.mapId,
@@ -287,8 +299,11 @@
           istPerHour,
           minutesPerRun,
           killPct: Number(run.killModel?.killPct ?? 1),
-          byItemIst: ev.byItemIst,
-          missingTc: ev.missingTc
+          byItemIst: ev.predictable.byItemIst,
+          missingTc: ev.missingTc,
+          vexPlusProb,
+          vexPlusExpected: ev.lottery.vexPlusExpected,
+          expectedDrops: ev.predictable.expectedDrops
         });
       }
 
@@ -301,6 +316,7 @@
           <th></th>
           <th class="right">IST/run</th>
           <th class="right">IST/hour</th>
+          <th class="right">Vex+ prob/run</th>
           <th class="right">min/run</th>
           <th class="right">killPct</th>
         </tr>
@@ -310,6 +326,7 @@
             <td class="right"><button data-gear="${r.mapId}" title="Edit" style="cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:var(--text); border-radius:10px; padding:6px 9px;">⚙️</button></td>
             <td class="mono right">${fmt(r.istPerRun,6)}</td>
             <td class="mono right">${fmt(r.istPerHour,4)}</td>
+            <td class="mono right">${fmt(r.vexPlusProb*100,2)}%</td>
             <td class="mono right">${fmt(r.minutesPerRun,2)}</td>
             <td class="mono right">${fmt(r.killPct,2)}</td>
           </tr>

@@ -1,7 +1,7 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "mapId": "chaos-sanctuary",
-  "label": "Seal run (approx)",
+  "label": "Seal run (test-based: ~110 mobs + 3 seal packs + Diablo)",
   "assumptions": {
     "difficulty": "hell",
     "players": 1,
@@ -11,10 +11,30 @@
     "minutesPerRun": 3.0
   },
   "killModel": {
-    "killPct": 0.45
+    "killPct": 0.0
+  },
+  "testData": {
+    "mobsPerRun_range": [100, 120],
+    "mobsPerRun_avg": 110,
+    "championPct": 0.10,
+    "sealPacks": [
+      { "mob": "storm caster", "minions": 11, "boss": 1 },
+      { "mob": "dark knight", "minions": 7, "boss": 1 },
+      { "mob": "venom knight", "minions": 10, "boss": 1 }
+    ],
+    "tcMappingAssumption": {
+      "storm caster": "Act 4 (H) Cast B",
+      "dark knight": "Act 4 (H) H2H B",
+      "venom knight": "Act 4 (H) H2H B",
+      "seal boss": "Act 4 (H) Super B"
+    }
   },
   "guaranteed": {
     "tcSet": {
+      "Act 4 (H) Cast B": 39,
+      "Act 4 (H) H2H B": 60,
+      "Act 4 (H) Champ B": 11,
+      "Act 4 (H) Super B": 3,
       "Diablo (H)": 1
     }
   }
