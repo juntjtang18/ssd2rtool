@@ -15,7 +15,8 @@
 
       { "name": "BONUS IST", "dropPerRun": 0.0108 },
       { "name": "BONUS UM",  "dropPerRun": 0.0054 },
-      { "name": "BONUS MAL", "dropPerRun": 0.0054 }
+      { "name": "BONUS MAL", "dropPerRun": 0.0054 },
+      { "name": "BONUS PUL", "dropPerRun": 0.0093 }
     ]
   }
 }
