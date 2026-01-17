@@ -53,7 +53,7 @@
   <div class="wrap">
     <h1>Boss Rune Drop Rates</h1>
     <div class="sub">
-      Table values are <span class="mono">expected drop count per kill</span> (not "chance of at least one").
+      Table values are based on <span class="mono">expected drop count per kill</span> (not "chance of at least one").
       Click a rune name (left column) to sort bosses by that rune.
     </div>
 
@@ -63,7 +63,18 @@
           <label>Display</label>
           <select id="fmtSel">
             <option value="perkill">Per kill (scientific)</option>
-            <option value="onein">1 in N (approx)</option>
+            <option value="onein">1:N (DropCalc style)</option>
+            <option value="per10k">Per 10,000 kills</option>
+            <option value="per1m">Per 1,000,000 kills</option>
+          </select>
+        </div>
+
+        <div class="ctrl" style="min-width:180px;">
+          <label>Precision</label>
+          <select id="precSel">
+            <option value="2">Compact</option>
+            <option value="3" selected>Normal</option>
+            <option value="5">Detailed</option>
           </select>
         </div>
 
@@ -73,6 +84,14 @@
             <input id="showAll" type="checkbox" />
             <span>Show all runes from price table (otherwise: high runes only)</span>
           </div>
+        </div>
+
+        <div class="ctrl" style="min-width:240px;">
+          <label>Andariel</label>
+          <select id="andyModeSel">
+            <option value="normal" selected>Normal drops (repeat farm)</option>
+            <option value="quest">Quest-bug drops (Andariel only)</option>
+          </select>
         </div>
 
         <div class="ctrl" style="min-width:260px;">
@@ -102,7 +121,7 @@
 
   <script type="module">
     import { loadPriceTable, normRune } from "../model/priceTable.js";
-    import { BOSSES, loadAllBossDrops, formatBossMeta } from "../model/rpk.js";
+    import { BOSSES, loadBossDropsByFileId, formatBossMeta } from "../model/rpk.js";
 
     const el = (id) => document.getElementById(id);
 
@@ -116,7 +135,12 @@
     let bossesData = null; // [{id,label,data}, ...]
 
     let showAll = false;
-    let fmtMode = "perkill"; // perk... or onein
+    let andarielMode = "normal"; // normal | quest (quest-bug style, Andariel only)
+
+    const ANDARIEL_ID = "andariel";
+    // Default to DropCalc-style readability.
+    let fmtMode = "onein"; // onein | perk... | per10k | per1m
+    let precision = 3; // 2 (compact), 3 (normal), 5 (detailed)
     let sortRune = null;
     let sortDir = "desc";
 
@@ -149,8 +173,19 @@
       return [...preferred, ...extra];
     }
 
-    function buildBossOrder(runesMatrix) {
-      const base = [...BOSSES];
+    function currentBossColumns() {
+      // Council (5) is a pack (5 kills) and not comparable to single-boss columns, so we omit it here.
+      return BOSSES.filter(b => b.id !== "council5");
+    }
+
+    function fileIdForBoss(bossId) {
+      // Only Andariel can realistically be farmed in persistent quest-bug mode; other act bosses are always normal.
+      if (bossId === "andariel" && andarielMode === "quest") return "andarielq";
+      return bossId;
+    }
+
+    function buildBossOrder(runesMatrix, baseBosses) {
+      const base = [...baseBosses];
       if (!sortRune) return base;
 
       const r = sortRune;
@@ -163,39 +198,59 @@
       return base;
     }
 
-    function fmtPerKill(p) {
+    function fmtScientific(p) {
       if (!(p > 0)) return "-";
-      // keep stable width-ish with 3 decimals
-      return Number(p).toExponential(3);
+      return Number(p).toExponential(precision);
     }
 
     function fmtOneIn(p) {
       if (!(p > 0)) return "-";
       const n = 1 / Number(p);
       if (!Number.isFinite(n)) return "-";
-      // big numbers: add separators, but keep as integer
-      return Math.round(n).toLocaleString("en-US");
+      return `1:${Math.round(n).toLocaleString("en-US")}`;
+    }
+
+    function fmtPerScale(p, scale, label) {
+      if (!(p > 0)) return "-";
+      const v = Number(p) * scale;
+      // Use fixed decimals for intuitive reading; trim trailing zeros for compactness.
+      const s = v.toFixed(precision).replace(/\.0+$/,'').replace(/(\.\d*?)0+$/,'$1');
+      return s;
     }
 
     function cellText(p) {
-      return fmtMode === "onein" ? fmtOneIn(p) : fmtPerKill(p);
+      if (fmtMode === "onein") return fmtOneIn(p);
+      if (fmtMode === "per10k") return fmtPerScale(p, 10000);
+      if (fmtMode === "per1m") return fmtPerScale(p, 1000000);
+      return fmtScientific(p);
     }
 
     function cellTitle(p) {
       if (!(p > 0)) return "0";
       const oneIn = 1 / p;
-      const oneInStr = Number.isFinite(oneIn) ? Math.round(oneIn).toLocaleString("en-US") : "-";
-      return `perKill=${p} | ~1 in ${oneInStr}`;
+      const oneInStr = Number.isFinite(oneIn) ? `1:${Math.round(oneIn).toLocaleString("en-US")}` : "-";
+      const per10k = (p * 10000).toFixed(3);
+      const per1m = (p * 1000000).toFixed(3);
+      return `perKill=${p} | ${oneInStr} | per10k=${per10k} | per1m=${per1m}`;
     }
 
     function buildMetaPills() {
       const first = bossesData?.[0]?.data;
       const meta = formatBossMeta(first);
+      const bossCount = (bossesData || []).length;
+      const modeLabel = (
+        fmtMode === "onein" ? "1:N" :
+        fmtMode === "per10k" ? "per 10k" :
+        fmtMode === "per1m" ? "per 1M" :
+        "scientific"
+      );
       const pills = [
         `<span class="pill">dataset <strong>${meta || "-"}</strong></span>`,
-        `<span class="pill">bosses <strong>${BOSSES.length}</strong></span>`,
-        `<span class="pill">mode <strong>${fmtMode === "onein" ? "1 in N" : "perKill"}</strong></span>`,
+        `<span class="pill">bosses <strong>${bossCount}</strong></span>`,
+        `<span class="pill">mode <strong>${modeLabel}</strong></span>`,
+        `<span class="pill">precision <strong>${precision}</strong></span>`,
       ];
+      pills.push(`<span class="pill">Andariel <strong>${andarielMode === "quest" ? "quest-bug" : "normal"}</strong></span>`);
       if (sortRune) pills.push(`<span class="pill">sorted <strong>${sortRune} ${sortDir === "desc" ? "down" : "up"}</strong></span>`);
       el("metaPills").innerHTML = pills.join("");
     }
@@ -214,7 +269,7 @@
         matrix[b.id] = m;
       }
 
-      const bossOrder = buildBossOrder(matrix);
+      const bossOrder = buildBossOrder(matrix, currentBossColumns());
 
       // head
       const thead = el("thead");
@@ -264,10 +319,22 @@
       buildMetaPills();
     }
 
+    async function loadBossesData() {
+      const cols = currentBossColumns();
+      const rows = await Promise.all(
+        cols.map(async (b) => {
+          const fileId = fileIdForBoss(b.id);
+          const data = await loadBossDropsByFileId(fileId);
+          return { ...b, data };
+        })
+      );
+      return rows;
+    }
+
     async function main() {
       try {
         priceTable = await loadPriceTable();
-        bossesData = await loadAllBossDrops(BOSSES);
+        bossesData = await loadBossesData();
 
         // wire controls
         el("showAll").checked = showAll;
@@ -275,6 +342,23 @@
 
         el("fmtSel").value = fmtMode;
         el("fmtSel").onchange = (e) => { fmtMode = e.target.value; buildMetaPills(); render(); };
+
+        el("precSel").value = String(precision);
+        el("precSel").onchange = (e) => {
+          const v = Number(e.target.value);
+          precision = Number.isFinite(v) ? v : 3;
+          buildMetaPills();
+          render();
+        };
+
+        el("andyModeSel").value = andarielMode;
+        el("andyModeSel").onchange = async (e) => {
+          andarielMode = e.target.value === "quest" ? "quest" : "normal";
+          sortRune = null;
+          bossesData = await loadBossesData();
+          buildMetaPills();
+          render();
+        };
 
         render();
       } catch (err) {
