@@ -1,0 +1,238 @@
+<!doctype html>
+<!-- /pages/rpk.html -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SSD2R Tool — Boss RPK</title>
+  <style>
+    :root{
+      --bg:#0b1220; --text:#e7eefc; --muted:#9db0d1;
+      --accent:#65d2ff; --good:#8bffb1; --warn:#ffd38b; --bad:#ff8b8b;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    }
+    body{ margin:0; background:linear-gradient(180deg,#070c16,var(--bg)); color:var(--text); font-family:var(--sans); }
+    .wrap{ max-width:1100px; margin:24px auto; padding:0 16px; }
+    h1{ font-size:20px; margin:0 0 8px; }
+    .sub{ color:var(--muted); font-size:12px; line-height:1.45; }
+
+    .card{ background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:16px; box-shadow:0 12px 26px rgba(0,0,0,0.35); }
+    .row{ display:grid; grid-template-columns:1.2fr .8fr; gap:16px; }
+    @media (max-width: 900px){ .row{ grid-template-columns:1fr; } }
+
+    label{ display:block; font-size:12px; color:var(--muted); margin:0 0 6px; }
+    select{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.22); color:var(--text); outline:none; }
+
+    a{ color:var(--accent); text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    table{ width:100%; border-collapse:collapse; }
+    th, td{ padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
+    th{ text-align:left; font-size:12px; color:var(--muted); font-weight:900; }
+    .mono{ font-family:var(--mono); }
+    .num{ text-align:right; font-family:var(--mono); }
+    .bossRow{ cursor:pointer; }
+    .bossRow:hover td{ color:var(--accent); }
+
+    .pillbar{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.18); font-size:12px; color:var(--muted); }
+    .pill strong{ color:var(--text); font-family:var(--mono); }
+
+    .hero{ font-size:34px; font-weight:900; letter-spacing:-0.02em; }
+    .unit{ font-size:12px; color:var(--muted); margin-left:8px; font-weight:800; }
+
+    .err{ font-size:12px; color:var(--bad); white-space:pre-wrap; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>Boss RPK (Revenue Per Kill)</h1>
+    <div class="sub">
+      RPK(boss) = Σ ( DropCountPerKill(item) × PriceIst(item) ).
+      Uses pre-distilled Hell /players1 boss drops from <span class="mono">/config/boss_drops</span>.
+    </div>
+
+    <div class="card" style="margin-top:14px; margin-bottom:16px;">
+      <div class="row" style="grid-template-columns:1fr 1fr;">
+        <div>
+          <label>Price phase</label>
+          <select id="phaseSel"></select>
+          <div class="sub">Source: <span class="mono">/config/rune-price-table.json</span></div>
+        </div>
+        <div>
+          <label>Dataset</label>
+          <div class="pillbar" id="metaPills"></div>
+        </div>
+      </div>
+      <div class="err" id="loadErr" style="display:none; margin-top:10px;"></div>
+      <div class="sub" style="margin-top:10px;">
+        <a href="../index.html">← Back</a>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h2 style="margin:0 0 10px; font-size:15px; color:var(--muted);">Leaderboard</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Boss</th>
+              <th class="num">RPK (Ist/kill)</th>
+              <th class="num">/100 kills</th>
+            </tr>
+          </thead>
+          <tbody id="bossTable"></tbody>
+        </table>
+        <div class="sub" style="margin-top:10px;">
+          Tip: click a boss row to see item breakdown.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin:0 0 10px; font-size:15px; color:var(--muted);">Breakdown</h2>
+        <div class="sub" id="pickedMeta">Pick a boss from the left.</div>
+        <div style="margin-top:10px;">
+          <div class="hero"><span id="pickedRpk">—</span><span class="unit">Ist/kill</span></div>
+        </div>
+        <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.06);"></div>
+        <table style="margin-top:10px;">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th class="num">Drop/kill</th>
+              <th class="num">Price (Ist)</th>
+              <th class="num">Value/kill</th>
+            </tr>
+          </thead>
+          <tbody id="itemTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { loadPriceTable, getRuneQuote } from "../model/priceTable.js";
+    import { BOSSES, loadAllBossDrops, computeBossRpk, formatBossMeta } from "../model/rpk.js";
+
+    const el = (id) => document.getElementById(id);
+    const fmt = (x, d=6) => (x == null || Number.isNaN(Number(x))) ? "—" : Number(x).toFixed(d);
+    const fmt2 = (x, d=2) => (x == null || Number.isNaN(Number(x))) ? "—" : Number(x).toFixed(d);
+
+    let priceTable = null;
+    let phaseKey = null;
+    let bossesData = null; // [{id,label,data}, ...]
+
+    function setErr(msg) {
+      const box = el("loadErr");
+      if (!msg) { box.style.display = "none"; box.textContent = ""; return; }
+      box.style.display = "block";
+      box.textContent = msg;
+    }
+
+    function buildPhaseSel() {
+      const phases = priceTable?.phases ?? {};
+      const keys = Object.keys(phases).sort((a,b)=>Number(a)-Number(b));
+      const d = String(priceTable?.defaultPhase ?? (keys[0] || "1"));
+      phaseKey = phaseKey || d;
+
+      const sel = el("phaseSel");
+      sel.innerHTML = keys.map(k => `<option value="${k}">Phase ${k}</option>`).join("");
+      sel.value = phaseKey;
+      sel.onchange = () => {
+        phaseKey = sel.value;
+        renderAll();
+      };
+    }
+
+    function buildMetaPills() {
+      // show the meta from the first boss file (they should be consistent)
+      const first = bossesData?.[0]?.data;
+      const meta = formatBossMeta(first);
+      const q = getRuneQuote(priceTable, phaseKey, "UKEY");
+      const keyPrice = (q?.priceIst ?? 0);
+      const pills = [
+        `<span class="pill">dataset <strong>${meta || "—"}</strong></span>`,
+        `<span class="pill">phase <strong>${phaseKey}</strong></span>`,
+        `<span class="pill">UKEY <strong>${fmt(keyPrice,6)}</strong> Ist</span>`,
+      ];
+      el("metaPills").innerHTML = pills.join("");
+    }
+
+    function renderLeaderboard() {
+      const body = el("bossTable");
+      body.innerHTML = "";
+
+      const rows = bossesData.map(b => {
+        const { rpkIst, rows: breakdown } = computeBossRpk({ bossDropsJson: b.data, priceTable, phase: phaseKey });
+        return { ...b, rpkIst, breakdown };
+      }).sort((a,b)=> b.rpkIst - a.rpkIst);
+
+      for (const r of rows) {
+        const tr = document.createElement("tr");
+        tr.className = "bossRow";
+        tr.innerHTML = `
+          <td><span style="font-weight:900;">${r.label}</span></td>
+          <td class="num">${fmt(r.rpkIst,10)}</td>
+          <td class="num">${fmt2(r.rpkIst*100,4)}</td>
+        `;
+        tr.onclick = () => renderBreakdown(r);
+        body.appendChild(tr);
+      }
+
+      // auto-pick top boss
+      if (rows.length) renderBreakdown(rows[0]);
+    }
+
+    function renderBreakdown(bossRow) {
+      const meta = formatBossMeta(bossRow.data);
+      el("pickedMeta").textContent = `${bossRow.label} · ${meta}`;
+      el("pickedRpk").textContent = fmt(bossRow.rpkIst,10);
+
+      const body = el("itemTable");
+      body.innerHTML = "";
+
+      // only show contributors with non-trivial value, but keep UKEY always visible if present
+      const list = (bossRow.breakdown || []).filter(x => (x.valueIst > 0) && (x.valueIst >= bossRow.rpkIst * 0.002 || x.item === "UKEY"));
+
+      for (const x of list) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono" style="font-weight:900; color:var(--accent);">${x.item}</td>
+          <td class="num">${fmt(x.perKill,10)}</td>
+          <td class="num">${fmt(x.priceIst,10)}</td>
+          <td class="num">${fmt(x.valueIst,10)}</td>
+        `;
+        body.appendChild(tr);
+      }
+
+      if (!list.length) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td class="sub" colspan="4">No priced items found for this boss in the selected phase.</td>`;
+        body.appendChild(tr);
+      }
+    }
+
+    function renderAll() {
+      buildMetaPills();
+      renderLeaderboard();
+    }
+
+    async function main() {
+      try {
+        setErr(null);
+        priceTable = await loadPriceTable();
+        bossesData = await loadAllBossDrops(BOSSES);
+
+        buildPhaseSel();
+        renderAll();
+      } catch (e) {
+        setErr(String(e?.message ?? e));
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>

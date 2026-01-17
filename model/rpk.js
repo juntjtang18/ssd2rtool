@@ -1,0 +1,70 @@
+// /model/rpk.js
+// Revenue Per Kill (RPK) for bosses based on pre-distilled expected drop counts.
+//
+// Conventions:
+// - boss drops JSON provides expected item count per kill (not "chance at least one")
+// - prices come from /config/rune-price-table.json using O/N -> Ist per item
+
+import { getRunePriceIst, normRune } from "./priceTable.js";
+
+export const BOSSES = [
+  { id: "countess", label: "Countess" },
+  { id: "summoner", label: "Summoner" },
+  { id: "nihl", label: "Nihlathak" },
+  { id: "council", label: "Council (1)" },
+  { id: "council5", label: "Council (5)" },
+  { id: "andariel", label: "Andariel" },
+  { id: "mephisto", label: "Mephisto" },
+  { id: "diablo", label: "Diablo" },
+  { id: "baal", label: "Baal" },
+];
+
+async function fetchJson(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`${url}: ${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+export async function loadBossDrops(bossId) {
+  const url = new URL(`../config/boss_drops/boss.${bossId}.drops.json`, import.meta.url);
+  return fetchJson(url.href);
+}
+
+export async function loadAllBossDrops(bosses = BOSSES) {
+  const rows = await Promise.all(
+    bosses.map(async (b) => ({ ...b, data: await loadBossDrops(b.id) }))
+  );
+  return rows;
+}
+
+export function computeBossRpk({ bossDropsJson, priceTable, phase }) {
+  const drops = bossDropsJson?.drops ?? {};
+  const rows = [];
+  let rpkIst = 0;
+
+  for (const [rawItem, rawCount] of Object.entries(drops)) {
+    const item = normRune(rawItem);
+    const perKill = Number(rawCount);
+    if (!(perKill > 0)) continue;
+
+    const priceIst = getRunePriceIst(priceTable, phase, item);
+    const valueIst = perKill * (priceIst || 0);
+
+    rows.push({ item, perKill, priceIst: priceIst || 0, valueIst });
+    rpkIst += valueIst;
+  }
+
+  rows.sort((a, b) => (b.valueIst - a.valueIst));
+  return { rpkIst, rows };
+}
+
+export function formatBossMeta(bossDropsJson) {
+  const boss = bossDropsJson?.boss ?? "";
+  const difficulty = bossDropsJson?.difficulty ?? "";
+  const players = bossDropsJson?.players ?? "";
+  const parts = [];
+  if (boss) parts.push(String(boss));
+  if (difficulty) parts.push(`diff=${difficulty}`);
+  if (players) parts.push(`/p${players}`);
+  return parts.join(" · ");
+}
