@@ -3,7 +3,7 @@
     "difficulty": "hell",
     "players": 1,
     "party": 1,
-    "source": "@blizzhackers/d2data 2.7.15 monpopulationest + monstats + superuniques; counts=packCount(H)*avg(MinGrp,MaxGrp); superunique approx=(1+avgMinions)"
+    "source": "Travincal is modeled as the High Council pack (fixed 11 Council Members: 3 superunique + 8 minions). Baseline uses a fixed Council count instead of monpopulationest to avoid misleading non-council population estimates."
   },
   "mapId": "travincal",
   "name": "Travincal",
@@ -14,10 +14,7 @@
     83
   ],
   "tcCounts": {
-    "Act 3 (H) Cast B": 37.97,
-    "Act 3 (H) Unique B": 8.4,
-    "Council (H)": 7.0,
-    "Act 3 (H) Champ B": 2.1
+    "Council (H)": 11
   },
   "tcMissingInTcDropTable": [],
   "secondsPerRun": null
