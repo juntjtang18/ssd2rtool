@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1,
+    "source": "@blizzhackers/d2data 2.7.15 monpopulationest + monstats + superuniques; counts=packCount(H)*avg(MinGrp,MaxGrp); superunique approx=(1+avgMinions)"
+  },
+  "mapId": "chaos-sanctuary",
+  "name": "Chaos Sanctuary",
+  "levels": [
+    "Chaos Sanctum"
+  ],
+  "levelIds": [
+    108
+  ],
+  "tcCounts": {
+    "Act 4 (H) H2H B": 52.335,
+    "Act 4 (H) Wraith B": 21.806,
+    "Act 4 (H) Super B": 20.0,
+    "Act 4 (H) Unique B": 11.267,
+    "Act 4 (H) Super C": 6.0,
+    "Act 4 (H) Champ B": 2.817,
+    "Diablo (H)": 1.0
+  },
+  "tcMissingInTcDropTable": [],
+  "secondsPerRun": null
+}

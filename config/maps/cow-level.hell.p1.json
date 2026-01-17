@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1,
+    "source": "@blizzhackers/d2data 2.7.15 monpopulationest + monstats + superuniques; counts=packCount(H)*avg(MinGrp,MaxGrp); superunique approx=(1+avgMinions)"
+  },
+  "mapId": "cow-level",
+  "name": "Cow Level",
+  "levels": [
+    "Moo Moo Farm"
+  ],
+  "levelIds": [
+    39
+  ],
+  "tcCounts": {
+    "Cow (H)": 467.0,
+    "Act 4 (H) Unique B": 42.0,
+    "Act 4 (H) Champ B": 10.5,
+    "Cow King (H)": 7.0
+  },
+  "tcMissingInTcDropTable": [],
+  "secondsPerRun": null
+}

@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1,
+    "source": "@blizzhackers/d2data 2.7.15 monpopulationest + monstats + superuniques; counts=packCount(H)*avg(MinGrp,MaxGrp); superunique approx=(1+avgMinions)"
+  },
+  "mapId": "nilh-halls",
+  "name": "Halls (Nihlathak run)",
+  "levels": [
+    "Halls of Anguish",
+    "Halls of Death's Calling",
+    "Halls of Vaught"
+  ],
+  "levelIds": [
+    122,
+    123,
+    124
+  ],
+  "tcCounts": {
+    "Act 3 (H) H2H B": 227.893,
+    "Act 5 (H) H2H B": 86.07,
+    "Act 3 (H) Cast B": 84.307,
+    "Act 5 (H) Cast A": 28.391,
+    "Act 5 (H) H2H C": 26.152,
+    "Quill 1 (H)": 23.194,
+    "Act 5 (H) H2H A": 21.165,
+    "Act 4 (H) Cast B": 16.567,
+    "Act 2 (H) H2H A": 16.552,
+    "Act 2 (H) Cast B": 11.035,
+    "Act 3 (H) Unique B": 7.872,
+    "Act 1 (H) Wraith B": 6.704,
+    "Act 5 (H) Cast B": 6.627,
+    "Act 5 (H) Unique B": 6.428,
+    "Act 5 (H) Unique A": 5.417,
+    "Act 2 (H) Unique A": 3.9,
+    "Act 2 (H) Unique B": 2.6,
+    "Act 3 (H) Champ B": 1.968,
+    "Act 5 (H) Unique C": 1.95,
+    "Act 5 (H) Champ B": 1.607,
+    "Act 4 (H) Unique B": 1.444,
+    "Act 5 (H) Champ A": 1.354,
+    "Act 2 (H) Champ A": 0.975,
+    "Act 2 (H) Champ B": 0.65,
+    "Act 5 (H) Champ C": 0.487,
+    "Act 4 (H) Champ B": 0.361
+  },
+  "tcMissingInTcDropTable": [
+    "Quill 1 (H)"
+  ],
+  "secondsPerRun": null
+}

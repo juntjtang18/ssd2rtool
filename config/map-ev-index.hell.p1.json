@@ -1,0 +1,16 @@
+{
+  "meta": { "difficulty": "hell", "players": 1, "party": 1 },
+  "tcDropTable": "./tc/tc-drop-table.hell.p1.json",
+  "priceTable": "./rune-price-table.json",
+  "maps": [
+    { "mapId": "wsk-baal-run", "name": "WSK2+WSK3+Throne+Chamber (Baal)", "mapFile": "./maps/wsk-baal-run.hell.p1.json", "runFile": "./map_runs/wsk-baal-run.hell.p1.run.json" },
+    { "mapId": "chaos-sanctuary", "name": "Chaos Sanctuary", "mapFile": "./maps/chaos-sanctuary.hell.p1.json", "runFile": "./map_runs/chaos-sanctuary.hell.p1.run.json" },
+    { "mapId": "travincal", "name": "Travincal", "mapFile": "./maps/travincal.hell.p1.json", "runFile": "./map_runs/travincal.hell.p1.run.json" },
+    { "mapId": "cow-level", "name": "Cow Level", "mapFile": "./maps/cow-level.hell.p1.json", "runFile": "./map_runs/cow-level.hell.p1.run.json" },
+    { "mapId": "durance-of-hate-3", "name": "Durance of Hate L3 (Mephisto)", "mapFile": "./maps/durance-of-hate-3.hell.p1.json", "runFile": "./map_runs/durance-of-hate-3.hell.p1.run.json" },
+    { "mapId": "arcane-sanctuary", "name": "Arcane Sanctuary (Summoner)", "mapFile": "./maps/arcane-sanctuary.hell.p1.json", "runFile": "./map_runs/arcane-sanctuary.hell.p1.run.json" },
+    { "mapId": "nilh-halls", "name": "Halls (Nihlathak run)", "mapFile": "./maps/nilh-halls.hell.p1.json", "runFile": "./map_runs/nilh-halls.hell.p1.run.json" },
+    { "mapId": "tower-cellar-5", "name": "Tower Cellar L5 (Countess)", "mapFile": "./maps/tower-cellar-5.hell.p1.json", "runFile": "./map_runs/tower-cellar-5.hell.p1.run.json" },
+    { "mapId": "catacombs-4", "name": "Catacombs L4 (Andariel)", "mapFile": "./maps/catacombs-4.hell.p1.json", "runFile": "./map_runs/catacombs-4.hell.p1.run.json" }
+  ]
+}

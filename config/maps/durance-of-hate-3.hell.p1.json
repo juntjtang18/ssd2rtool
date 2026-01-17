@@ -1,0 +1,25 @@
+{
+  "meta": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1,
+    "source": "@blizzhackers/d2data 2.7.15 monpopulationest + monstats + superuniques; counts=packCount(H)*avg(MinGrp,MaxGrp); superunique approx=(1+avgMinions)"
+  },
+  "mapId": "durance-of-hate-3",
+  "name": "Durance of Hate L3 (Mephisto)",
+  "levels": [
+    "Durance of Hate Level 3"
+  ],
+  "levelIds": [
+    102
+  ],
+  "tcCounts": {
+    "Act 3 (H) Cast C": 22.0,
+    "Act 3 (H) Unique C": 12.0,
+    "Council (H)": 5.0,
+    "Act 3 (H) Champ C": 3.0,
+    "Mephisto (H)": 1.0
+  },
+  "tcMissingInTcDropTable": [],
+  "secondsPerRun": null
+}

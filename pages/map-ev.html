@@ -1,0 +1,298 @@
+<!doctype html>
+<!-- /pages/map-ev.html -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>D2R Map EV (currency-only)</title>
+  <style>
+    :root{
+      --bg:#0b1220; --text:#e7eefc; --muted:#9db0d1;
+      --accent:#65d2ff; --good:#8bffb1; --warn:#ffd38b; --bad:#ff8b8b;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    }
+    body{ margin:0; background:linear-gradient(180deg,#070c16,var(--bg)); color:var(--text); font-family:var(--sans); }
+    .wrap{ max-width:1180px; margin:24px auto; padding:0 16px; }
+    h1{ font-size:20px; margin:0 0 10px; }
+    .sub{ color:var(--muted); font-size:12px; line-height:1.4; }
+    .row{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 980px){ .row{ grid-template-columns:1fr; } }
+    .card{ background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:16px; box-shadow:0 12px 26px rgba(0,0,0,0.35); }
+    .card h2{ margin:0 0 10px; font-size:15px; color:var(--muted); }
+    label{ display:block; font-size:12px; color:var(--muted); margin:10px 0 6px; }
+    select, input{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.22); color:var(--text); outline:none; }
+    table{ width:100%; border-collapse:collapse; font-size:12px; }
+    th, td{ text-align:left; padding:10px 8px; border-bottom:1px solid rgba(255,255,255,0.06); vertical-align:top; }
+    th{ color:var(--muted); font-weight:800; }
+    .mono{ font-family:var(--mono); }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding:7px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.18); font-size:12px; color:var(--muted); margin-right:8px; margin-top:8px; }
+    .pill strong{ color:var(--text); font-family:var(--mono); }
+    .err{ font-size:12px; color:var(--bad); white-space:pre-wrap; }
+    .btn{ padding:10px 12px; border-radius:12px; border:0; cursor:pointer; font-weight:900; background:var(--accent); color:#05101f; width:100%; margin-top:10px; }
+    .small{ font-size:11px; color:var(--muted); }
+    .right{ text-align:right; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>D2R Map EV (currency-only) — Solo Hell p1</h1>
+    <div class="sub">
+      Inputs: price table (phase) + TC drop table + baseline map (from data) + run config (kill model).<br/>
+      Notes: Uniques/sets not modeled. This is meant for comparing routes using tradable currency-like drops.
+    </div>
+
+    <div class="card" style="margin-top:14px;">
+      <div class="row" style="grid-template-columns: 1fr 1fr 1fr;">
+        <div>
+          <label>Price phase</label>
+          <select id="phaseSel"></select>
+          <div class="small">/config/rune-price-table.json</div>
+        </div>
+        <div>
+          <label>Run preset</label>
+          <select id="presetSel"></select>
+          <div class="small">/config/map_runs/*.run.json</div>
+        </div>
+        <div>
+          <label>Quick edit (this session only)</label>
+          <div class="small">Overrides only affect the table below (no file write).</div>
+        </div>
+      </div>
+      <div class="row" style="grid-template-columns: 1fr 1fr 1fr; margin-top:10px;">
+        <div>
+          <label>killPct</label>
+          <input id="killPct" type="number" min="0" max="1" step="0.01" value="0.1" />
+        </div>
+        <div>
+          <label>secondsPerRun</label>
+          <input id="secondsPerRun" type="number" min="1" step="1" value="120" />
+        </div>
+        <div>
+          <button class="btn" id="btnRecalc">Recalculate</button>
+        </div>
+      </div>
+      <div id="loadErr" class="err" style="display:none; margin-top:10px;"></div>
+      <div id="metaPills"></div>
+    </div>
+
+    <div class="row" style="margin-top:16px;">
+      <div class="card">
+        <h2>EV leaderboard</h2>
+        <div class="small">Sorted by Ist/hour using the current killPct + time override.</div>
+        <div style="overflow:auto; margin-top:10px;">
+          <table id="tbl"></table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Breakdown (selected)</h2>
+        <div class="small">Top contributors by IST/run (currency-only).</div>
+        <div id="detail" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import {
+      loadMapEvIndex,
+      loadMapEvBundle,
+      getPhaseOptions,
+      deriveRunTcCounts,
+      computeMapEvIst,
+      computePerHour
+    } from "../model/mapEvCore.js";
+
+    const el = (id) => document.getElementById(id);
+    const fmt = (x, d=2) => (x == null || Number.isNaN(Number(x))) ? "-" : Number(x).toFixed(d);
+
+    let idx = null;
+    let bundles = new Map();
+    let phaseKey = null;
+
+    function setErr(msg) {
+      const e = el("loadErr");
+      if (!msg) { e.style.display = "none"; e.textContent = ""; return; }
+      e.style.display = "block";
+      e.textContent = msg;
+    }
+
+    function currentPhaseData(priceTable) {
+      return priceTable?.phases?.[String(phaseKey)] ?? {};
+    }
+
+    function buildPhaseSel(priceTable) {
+      const { phases, defaultPhase } = getPhaseOptions(priceTable);
+      const keys = Object.keys(phases).sort((a,b)=>Number(a)-Number(b));
+      phaseKey = defaultPhase;
+      el("phaseSel").innerHTML = keys.map(k => `<option value="${k}">Phase ${k}</option>`).join("");
+      el("phaseSel").value = phaseKey;
+      el("phaseSel").addEventListener("change", () => { phaseKey = el("phaseSel").value; render(); });
+    }
+
+    function buildPresetSel(maps) {
+      el("presetSel").innerHTML = maps.map(m => `<option value="${m.mapId}">${m.name}</option>`).join("");
+      el("presetSel").addEventListener("change", () => { syncPresetInputs(); render(); });
+    }
+
+    function syncPresetInputs() {
+      const mapId = el("presetSel").value;
+      const b = bundles.get(mapId);
+      if (!b) return;
+
+      const killPct = Number(b.run?.killModel?.killPct ?? 1);
+      const seconds = Number(b.run?.time?.secondsPerRun ?? 0);
+
+      el("killPct").value = String(Number.isFinite(killPct) ? killPct : 1);
+      el("secondsPerRun").value = String(Number.isFinite(seconds) && seconds > 0 ? seconds : 120);
+    }
+
+    function pillsForSelected() {
+      const mapId = el("presetSel").value;
+      const b = bundles.get(mapId);
+      if (!b) return;
+      const m = b.map;
+      const r = b.run;
+      const miss = (m.tcMissingInTcDropTable ?? []).length;
+      const extra = [];
+      if (miss) extra.push(`missing TC in drop table: ${miss}`);
+
+      el("metaPills").innerHTML = [
+        `<span class="pill">map <strong>${m.mapId}</strong></span>`,
+        `<span class="pill">phase <strong>${phaseKey}</strong></span>`,
+        `<span class="pill">run <strong>${r.label ?? "(unnamed)"}</strong></span>`,
+        extra.length ? `<span class="pill" style="color:var(--warn)">${extra.join(" · ")}</span>` : ""
+      ].join("");
+    }
+
+    function renderDetail(row) {
+      if (!row) { el("detail").innerHTML = `<div class="small">Click a row in the leaderboard.</div>`; return; }
+      const items = Object.entries(row.byItemIst)
+        .sort((a,b)=>b[1]-a[1])
+        .slice(0, 12);
+
+      const miss = (row.missingTc ?? []).length;
+
+      el("detail").innerHTML = `
+        <div class="pill">selected <strong>${row.name}</strong></div>
+        <div class="pill">EV/run <strong>${fmt(row.istPerRun,3)}</strong> IST</div>
+        <div class="pill">EV/hour <strong>${fmt(row.istPerHour,3)}</strong> IST</div>
+        <div class="pill">seconds/run <strong>${fmt(row.secondsPerRun,0)}</strong></div>
+        <div class="pill">killPct <strong>${fmt(row.killPct,2)}</strong></div>
+        ${miss ? `<div class="pill" style="color:var(--warn)">missing TC <strong>${miss}</strong></div>` : ""}
+        <div style="margin-top:10px;" class="small">Top item contributors (IST/run):</div>
+        <table style="margin-top:6px; width:100%; border-collapse:collapse;">
+          <tr><th>Item</th><th class="right">IST/run</th></tr>
+          ${items.map(([k,v])=>`<tr><td class="mono">${k}</td><td class="mono right">${fmt(v,6)}</td></tr>`).join("")}
+        </table>
+        ${items.length ? "" : `<div class="small" style="margin-top:8px; color:var(--warn)">No priced items found in this run (check killPct / tables).</div>`}
+      `;
+    }
+
+    function render() {
+      setErr(null);
+      pillsForSelected();
+
+      // apply session overrides
+      const overrideKillPct = Number(el("killPct").value);
+      const overrideSeconds = Number(el("secondsPerRun").value);
+
+      const rows = [];
+
+      for (const m of idx.maps) {
+        const b = bundles.get(m.mapId);
+        if (!b) continue;
+
+        // clone run config shallowly and apply overrides
+        const run = JSON.parse(JSON.stringify(b.run));
+        run.killModel = run.killModel ?? {};
+        if (Number.isFinite(overrideKillPct) && overrideKillPct >= 0) run.killModel.killPct = overrideKillPct;
+        run.time = run.time ?? {};
+        if (Number.isFinite(overrideSeconds) && overrideSeconds > 0) run.time.secondsPerRun = overrideSeconds;
+
+        const runTcCounts = deriveRunTcCounts(b.map.tcCounts ?? {}, run);
+        const phaseData = currentPhaseData(b.priceTable);
+        const ev = computeMapEvIst({ runTcCounts, tcDropTable: b.tcDrop, phaseData });
+        const secondsPerRun = Number(run.time?.secondsPerRun ?? 0);
+        const istPerRun = ev.totalIstPerRun;
+        const istPerHour = computePerHour(istPerRun, secondsPerRun);
+
+        rows.push({
+          mapId: m.mapId,
+          name: m.name,
+          istPerRun,
+          istPerHour,
+          secondsPerRun,
+          killPct: Number(run.killModel?.killPct ?? 1),
+          byItemIst: ev.byItemIst,
+          missingTc: ev.missingTc
+        });
+      }
+
+      rows.sort((a,b)=>b.istPerHour - a.istPerHour);
+
+      const tbl = el("tbl");
+      tbl.innerHTML = `
+        <tr>
+          <th>Map</th>
+          <th class="right">IST/run</th>
+          <th class="right">IST/hour</th>
+          <th class="right">sec/run</th>
+          <th class="right">killPct</th>
+        </tr>
+        ${rows.map(r => `
+          <tr data-id="${r.mapId}" style="cursor:pointer">
+            <td>${r.name}</td>
+            <td class="mono right">${fmt(r.istPerRun,6)}</td>
+            <td class="mono right">${fmt(r.istPerHour,4)}</td>
+            <td class="mono right">${fmt(r.secondsPerRun,0)}</td>
+            <td class="mono right">${fmt(r.killPct,2)}</td>
+          </tr>
+        `).join("")}
+      `;
+
+      // row click
+      for (const tr of tbl.querySelectorAll("tr[data-id]")) {
+        tr.addEventListener("click", () => {
+          const id = tr.getAttribute("data-id");
+          const row = rows.find(x => x.mapId === id);
+          renderDetail(row);
+        });
+      }
+
+      // default detail: currently selected preset
+      const cur = rows.find(x => x.mapId === el("presetSel").value);
+      renderDetail(cur ?? rows[0] ?? null);
+    }
+
+    async function main() {
+      try {
+        const r = await loadMapEvIndex();
+        idx = r.index;
+
+        // Load bundles for all maps
+        const loads = idx.maps.map(async (m) => {
+          const b = await loadMapEvBundle(m, idx);
+          bundles.set(m.mapId, b);
+        });
+        await Promise.all(loads);
+
+        // phase selector uses the first bundle's price table
+        const first = bundles.get(idx.maps[0].mapId);
+        buildPhaseSel(first.priceTable);
+
+        buildPresetSel(idx.maps);
+        el("presetSel").value = idx.maps[0].mapId;
+        syncPresetInputs();
+
+        el("btnRecalc").addEventListener("click", () => render());
+
+        render();
+      } catch (e) {
+        setErr(String(e?.stack ?? e));
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1,
+    "source": "@blizzhackers/d2data 2.7.15 monpopulationest + monstats + superuniques; counts=packCount(H)*avg(MinGrp,MaxGrp); superunique approx=(1+avgMinions)"
+  },
+  "mapId": "wsk-baal-run",
+  "name": "WSK2+WSK3+Throne+Chamber (Baal)",
+  "levels": [
+    "The Worldstone Keep Level 2",
+    "The Worldstone Keep Level 3",
+    "Throne of Destruction",
+    "The Worldstone Chamber"
+  ],
+  "levelIds": [
+    129,
+    130,
+    131,
+    132
+  ],
+  "tcCounts": {
+    "Act 3 (H) H2H B": 74.199,
+    "Act 4 (H) H2H B": 40.939,
+    "Act 5 (H) Champ C": 33.853,
+    "Act 5 (H) H2H C": 19.852,
+    "Act 5 (H) Cast C": 15.244,
+    "Act 5 (H) Unique C": 11.411,
+    "Act 4 (H) Wraith B": 10.451,
+    "Act 3 (H) H2H C": 6.92,
+    "Act 5 (H) H2H B": 6.905,
+    "Act 3 (H) Unique B": 6.567,
+    "Act 2 (H) Cast B": 5.19,
+    "Act 1 (H) Wraith B": 5.179,
+    "Act 3 (H) Cast C": 5.112,
+    "Act 3 (H) Unique C": 4.733,
+    "Act 5 (H) Cast B": 4.636,
+    "Act 5 (H) Unique A": 4.622,
+    "Act 5 (H) Cast A": 4.316,
+    "Act 4 (H) Unique B": 4.089,
+    "Act 5 (H) Unique B": 3.978,
+    "Act 2 (H) Unique B": 2.8,
+    "Act 3 (H) Champ B": 1.642,
+    "Act 3 (H) Champ C": 1.183,
+    "Act 5 (H) Champ A": 1.156,
+    "Act 4 (H) Champ B": 1.022,
+    "Baal (H)": 1.0,
+    "Act 5 (H) Champ B": 0.994,
+    "Act 2 (H) Champ B": 0.7
+  },
+  "tcMissingInTcDropTable": [],
+  "secondsPerRun": null
+}

@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1,
+    "source": "@blizzhackers/d2data 2.7.15 monpopulationest + monstats + superuniques; counts=packCount(H)*avg(MinGrp,MaxGrp); superunique approx=(1+avgMinions)"
+  },
+  "mapId": "catacombs-4",
+  "name": "Catacombs L4 (Andariel)",
+  "levels": [
+    "Catacombs Level 4"
+  ],
+  "levelIds": [
+    37
+  ],
+  "tcCounts": {
+    "Act 2 (H) H2H C": 16.0,
+    "Act 2 (H) Unique C": 9.333,
+    "Act 1 (H) Cast C": 8.0,
+    "Act 1 (H) Unique C": 4.667,
+    "Act 2 (H) Champ C": 2.333,
+    "Act 1 (H) Champ C": 1.167,
+    "Andarielq (H)": 1.0
+  },
+  "tcMissingInTcDropTable": [],
+  "secondsPerRun": null
+}

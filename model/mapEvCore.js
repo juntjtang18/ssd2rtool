@@ -1,0 +1,147 @@
+// /model/mapEvCore.js
+// Map EV model (currency-only):
+//   EV_run = sum_tc( N_tc * sum_item( V_item * P_tc_item ) )
+//   EV_hour = EV_run * 3600 / secondsPerRun
+//
+// Inputs:
+//  - /config/rune-price-table.json (phase-based pricing; V_item in Ist)
+//  - /config/tc/tc-drop-table.hell.p1.json (P_tc_item)
+//  - /config/maps/<map>.hell.p1.json (baseline N_tc for a full clear; "median source")
+//  - /config/map_runs/<map>.hell.p1.run.json (run filter knobs; model input)
+
+async function fetchJson(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`${url}: ${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+export async function loadMapEvIndex(indexName = "map-ev-index.hell.p1.json") {
+  const idxUrl = new URL(`../config/${indexName}`, import.meta.url);
+  return { index: await fetchJson(idxUrl.href), url: idxUrl.href };
+}
+
+export async function loadMapEvBundle(entry, indexMeta) {
+  // entry.mapFile / entry.runFile are relative to /config
+  const base = new URL("../config/", import.meta.url);
+
+  const mapUrl = new URL(entry.mapFile.replace(/^\.\//, ""), base);
+  const runUrl = new URL(entry.runFile.replace(/^\.\//, ""), base);
+
+  // tcDropTable path comes from indexMeta.tcDropTable
+  const tcUrl = new URL(indexMeta.tcDropTable.replace(/^\.\//, ""), base);
+  const ptUrl = new URL(indexMeta.priceTable.replace(/^\.\//, ""), base);
+
+  const [map, run, tcDrop, priceTable] = await Promise.all([
+    fetchJson(mapUrl.href),
+    fetchJson(runUrl.href),
+    fetchJson(tcUrl.href),
+    fetchJson(ptUrl.href),
+  ]);
+
+  return { map, run, tcDrop, priceTable, urls: { map: mapUrl.href, run: runUrl.href, tc: tcUrl.href, pt: ptUrl.href } };
+}
+
+export function getPhaseOptions(priceTable) {
+  const phases = priceTable?.phases ?? {};
+  const keys = Object.keys(phases);
+  const defaultPhase = String(priceTable?.defaultPhase ?? (keys.length ? keys[0] : "1"));
+  return { phases, defaultPhase };
+}
+
+// Price-table convention: { O: items, N: ist } => 1 item = N/O Ist
+export function priceInIst(itemKey, phaseData) {
+  const key = String(itemKey ?? "").trim().toUpperCase();
+  const entry = phaseData?.[key];
+  if (!entry) return 0;
+  const O = Number(entry.O ?? 0);
+  const N = Number(entry.N ?? 0);
+  if (!(O > 0) || !(N > 0)) return 0;
+  return N / O;
+}
+
+export function deriveRunTcCounts(mapTcCounts, runCfg) {
+  const killModel = runCfg?.killModel ?? {};
+  const guaranteed = runCfg?.guaranteed ?? {};
+
+  const killPct = Number(killModel.killPct ?? 1);
+  const tcMul = killModel.tcMul ?? {};
+  const tcZero = new Set((killModel.tcZero ?? []).map(String));
+
+  const tcSet = guaranteed.tcSet ?? {};
+  const tcAdd = guaranteed.tcAdd ?? {};
+
+  const out = {};
+
+  // 1) base * killPct
+  for (const [tc, n] of Object.entries(mapTcCounts ?? {})) {
+    const base = Number(n ?? 0);
+    if (!Number.isFinite(base) || base <= 0) continue;
+    out[tc] = base * (Number.isFinite(killPct) ? killPct : 1);
+  }
+
+  // 2) tcMul overrides
+  for (const [tc, mul] of Object.entries(tcMul ?? {})) {
+    const base = Number(mapTcCounts?.[tc] ?? 0);
+    const m = Number(mul);
+    if (!(base > 0) || !Number.isFinite(m)) continue;
+    out[tc] = base * m;
+  }
+
+  // 3) tcZero
+  for (const tc of tcZero) out[tc] = 0;
+
+  // 4) tcSet (force exact)
+  for (const [tc, v] of Object.entries(tcSet ?? {})) {
+    const x = Number(v);
+    if (!Number.isFinite(x) || x < 0) continue;
+    out[tc] = x;
+  }
+
+  // 5) tcAdd
+  for (const [tc, v] of Object.entries(tcAdd ?? {})) {
+    const x = Number(v);
+    if (!Number.isFinite(x) || x === 0) continue;
+    out[tc] = Number(out[tc] ?? 0) + x;
+  }
+
+  return out;
+}
+
+export function computeMapEvIst({ runTcCounts, tcDropTable, phaseData }) {
+  const tcTable = tcDropTable?.tc ?? tcDropTable ?? {};
+
+  let total = 0;
+  const byItem = {};
+  const missingTc = [];
+
+  for (const [tc, Nt] of Object.entries(runTcCounts ?? {})) {
+    const n = Number(Nt ?? 0);
+    if (!(n > 0)) continue;
+
+    const drops = tcTable[tc];
+    if (!drops) {
+      missingTc.push(tc);
+      continue;
+    }
+
+    for (const [item, p] of Object.entries(drops)) {
+      const prob = Number(p ?? 0);
+      if (!(prob > 0)) continue;
+
+      const v = priceInIst(item, phaseData);
+      if (!(v > 0)) continue;
+
+      const c = n * prob * v;
+      total += c;
+      byItem[item] = (byItem[item] ?? 0) + c;
+    }
+  }
+
+  return { totalIstPerRun: total, byItemIst: byItem, missingTc };
+}
+
+export function computePerHour(totalIstPerRun, secondsPerRun) {
+  const s = Number(secondsPerRun ?? 0);
+  if (!(s > 0)) return 0;
+  return totalIstPerRun * (3600 / s);
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0",
+  "mapId": "travincal",
+  "label": "Council run",
+  "assumptions": { "difficulty": "hell", "players": 1, "party": 1 },
+  "time": { "secondsPerRun": 60 },
+  "killModel": { "killPct": 0.9 },
+  "guaranteed": { "tcSet": { "Council (H)": 7 } }
+}

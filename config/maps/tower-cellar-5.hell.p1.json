@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "difficulty": "hell",
+    "players": 1,
+    "party": 1,
+    "source": "@blizzhackers/d2data 2.7.15 monpopulationest + monstats + superuniques; counts=packCount(H)*avg(MinGrp,MaxGrp); superunique approx=(1+avgMinions)"
+  },
+  "mapId": "tower-cellar-5",
+  "name": "Tower Cellar L5 (Countess)",
+  "levels": [
+    "Tower Cellar Level 5"
+  ],
+  "levelIds": [
+    25
+  ],
+  "tcCounts": {
+    "Act 1 (H) Unique B": 7.56,
+    "Countess (H)": 7.0,
+    "Act 1 (H) H2H B": 4.53,
+    "Act 1 (H) Champ B": 1.89,
+    "Act 1 (H) Miss B": 0.768,
+    "Act 1 (H) Wraith B": 0.461
+  },
+  "tcMissingInTcDropTable": [],
+  "secondsPerRun": null
+}
