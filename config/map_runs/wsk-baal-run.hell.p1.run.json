@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
   "mapId": "wsk-baal-run",
-  "label": "WSK+Baal (approx)",
+  "label": "WSK2+WSK3+Throne+Chamber (Baal) - test",
   "assumptions": {
     "difficulty": "hell",
     "players": 1,
@@ -10,8 +10,14 @@
   "time": {
     "minutesPerRun": 3.5
   },
+  "base": {
+    "useMapTcCounts": false
+  },
   "guaranteed": {
     "tcSet": {
+      "Act 5 (H) H2H C": 57,
+      "Act 5 (H) Champ C": 1,
+      "Act 5 (H) Super C": 1,
       "Baal (H)": 1
     }
   }

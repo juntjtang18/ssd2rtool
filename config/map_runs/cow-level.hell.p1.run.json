@@ -8,9 +8,16 @@
     "party": 1
   },
   "time": {
-    "minutesPerRun": 4.0
+    "minutesPerRun": 4
+  },
+  "base": {
+    "useMapTcCounts": false
   },
   "guaranteed": {
-    "tcSet": {}
+    "tcSet": {
+      "Cow (H)": 500,
+      "Act 4 (H) Champ B": 7.5,
+      "Act 4 (H) Unique B": 6.5
+    }
   }
 }
