@@ -8,7 +8,7 @@
     "party": 1
   },
   "time": {
-    "minutesPerRun": 1.5
+    "minutesPerRun": 1.6
   },
   "base": {
     "useMapTcCounts": false
