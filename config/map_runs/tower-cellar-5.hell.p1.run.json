@@ -8,13 +8,14 @@
     "party": 1
   },
   "time": {
-    "minutesPerRun": 1.5
+    "minutesPerRun": 2.4
   },
   "base": {
     "useMapTcCounts": false
   },
   "guaranteed": {
     "tcSet": {
+      "Act 1 (H) H2H B": 15,
       "Countess (H)": 1
     }
   }

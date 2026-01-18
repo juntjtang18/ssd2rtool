@@ -8,13 +8,15 @@
     "party": 1
   },
   "time": {
-    "minutesPerRun": 2.0
+    "minutesPerRun": 1.6
   },
   "base": {
     "useMapTcCounts": false
   },
   "guaranteed": {
     "tcSet": {
+      "Act 2 (H) H2H B": 5,
+      "Act 2 (H) Wraith B": 5,
       "Summoner (H)": 1
     }
   }

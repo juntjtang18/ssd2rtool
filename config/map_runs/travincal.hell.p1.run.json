@@ -8,13 +8,14 @@
     "party": 1
   },
   "time": {
-    "minutesPerRun": 2.0
+    "minutesPerRun": 1.5
   },
   "base": {
     "useMapTcCounts": false
   },
   "guaranteed": {
     "tcSet": {
+      "Act 3 (H) H2H B": 5,
       "Council (H)": 11
     }
   }

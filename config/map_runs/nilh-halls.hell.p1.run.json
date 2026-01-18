@@ -8,13 +8,14 @@
     "party": 1
   },
   "time": {
-    "minutesPerRun": 2.0
+    "minutesPerRun": 1.6
   },
   "base": {
     "useMapTcCounts": false
   },
   "guaranteed": {
     "tcSet": {
+      "Act 5 (H) H2H C": 50,
       "Nihlathak (H)": 1
     }
   }
