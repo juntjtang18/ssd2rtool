@@ -38,7 +38,7 @@
   <div class="wrap">
     <h1>D2R Map EV (currency-only) — Solo Hell p1</h1>
     <div class="sub">
-      Inputs: price table (phase) + TC drop table + baseline map (from data) + run config (kill model).<br/>
+      Inputs: price table (phase) + TC drop table + baseline map (from data) + run config.<br/>
       Notes: Uniques/sets not modeled. This is meant for comparing routes using tradable currency-like drops.
     </div>
 
@@ -51,7 +51,7 @@
         </div>
         <div class="small" style="padding-bottom:10px;">
           Defaults come from <span class="mono">/config/map_runs/*.run.json</span>.
-          Click <span class="mono">⚙️</span> on a map to customize <span class="mono">killPct</span> and <span class="mono">minutes/run</span> (saved in your browser).
+          Click <span class="mono">⚙️</span> on a map to customize <span class="mono">minutes/run</span> (saved in your browser).
         </div>
       </div>
       <div id="loadErr" class="err" style="display:none; margin-top:10px;"></div>
@@ -68,7 +68,7 @@
       </div>
       <div class="card">
         <h2>Details</h2>
-        <div class="small">Top contributors by IST/run (currency-only) + per-map settings.</div>
+        <div class="small">Predictable drops (>=1%) + lottery drops (&lt;1%).</div>
         <div id="detail" style="margin-top:10px;"></div>
       </div>
     </div>
@@ -111,15 +111,32 @@
       el("phaseSel").addEventListener("change", () => { phaseKey = el("phaseSel").value; render(); });
     }
 
-    const OV_KEY = "ssd2rtool.mapRunOverrides.hell.p1.v1";
+    const OV_KEY = "ssd2rtool.mapRunOverrides.hell.p1.v2";
+    const OV_KEY_V1 = "ssd2rtool.mapRunOverrides.hell.p1.v1";
     let overrides = {};
     let selectedMapId = null;
     let editOpenFor = null;
 
     function loadOverrides() {
       try {
-        const raw = localStorage.getItem(OV_KEY);
-        overrides = raw ? JSON.parse(raw) : {};
+        // v2 overrides (minutes/run only). If v1 exists, migrate time.minutesPerRun and drop killPct.
+        const raw2 = localStorage.getItem(OV_KEY);
+        if (raw2) {
+          overrides = JSON.parse(raw2);
+          return;
+        }
+
+        const raw1 = localStorage.getItem(OV_KEY_V1);
+        if (!raw1) { overrides = {}; return; }
+        const v1 = JSON.parse(raw1);
+        const migrated = {};
+        for (const [mapId, ov] of Object.entries(v1 ?? {})) {
+          const m = {};
+          if (ov?.time?.minutesPerRun != null) m.time = { minutesPerRun: Number(ov.time.minutesPerRun) };
+          migrated[mapId] = m;
+        }
+        overrides = migrated;
+        try { localStorage.setItem(OV_KEY, JSON.stringify(overrides)); localStorage.removeItem(OV_KEY_V1); } catch {}
       } catch {
         overrides = {};
       }
@@ -146,10 +163,14 @@
       }
       // deep-ish merge for known nested objects
       out.time = { ...(baseRun?.time ?? {}), ...(ov.time ?? {}) };
-      out.killModel = { ...(baseRun?.killModel ?? {}), ...(ov.killModel ?? {}) };
+      out.base = { ...(baseRun?.base ?? {}), ...(ov.base ?? {}) };
+      out.tcOverride = { ...(baseRun?.tcOverride ?? {}), ...(ov.tcOverride ?? {}) };
       out.guaranteed = { ...(baseRun?.guaranteed ?? {}), ...(ov.guaranteed ?? {}) };
       out.guaranteed.tcSet = { ...(baseRun?.guaranteed?.tcSet ?? {}), ...(ov.guaranteed?.tcSet ?? {}) };
       out.guaranteed.tcAdd = { ...(baseRun?.guaranteed?.tcAdd ?? {}), ...(ov.guaranteed?.tcAdd ?? {}) };
+
+      // Hard-remove legacy killPct if it exists anywhere
+      if (out.killModel) delete out.killModel.killPct;
 
       // Back-compat: if secondsPerRun exists, convert to minutesPerRun
       if (out.time && out.time.minutesPerRun == null && out.time.secondsPerRun != null) {
@@ -184,40 +205,49 @@
     }
 
     function renderDetail(row) {
-      if (!row) { el("detail").innerHTML = `<div class="small">Click a row in the leaderboard.</div>`; return; }
-      const items = Object.entries(row.byItemIst)
-        .sort((a,b)=>b[1]-a[1])
-        .slice(0, 12);
+      if (!row) {
+        el("detail").innerHTML = `<div class="small">Click a row in the leaderboard.</div>`;
+        return;
+      }
 
-      const vexRows = Object.entries(row.vexPlusExpected ?? {})
-        .sort((a,b)=>b[1]-a[1])
-        .filter(([,v])=>Number(v || 0) > 0);
+      const nfInt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+      const odds = (p) => {
+        const x = Number(p ?? 0);
+        if (!(x > 0)) return "-";
+        const n = Math.max(1, Math.round(1 / x));
+        return `~1 / ${nfInt.format(n)} runs`;
+      };
 
-      const miss = (row.missingTc ?? []).length;
-
-      const isEditing = editOpenFor === row.mapId;
       const runCfg = getEffectiveRunCfg(row.mapId);
       const minutesPerRun = Number(runCfg?.time?.minutesPerRun ?? row.minutesPerRun ?? 0);
-      const killPct = Number(runCfg?.killModel?.killPct ?? row.killPct ?? 1);
+      const isEditing = editOpenFor === row.mapId;
+
+      // Predictable drops: show expected count/run + IST/run contribution
+      const predictable = Object.keys(row.expectedDrops ?? {})
+        .map((k) => {
+          const item = String(k);
+          const cnt = Number(row.expectedDrops?.[k] ?? 0);
+          const ist = Number(row.byItemIst?.[k] ?? 0);
+          return { item, cnt, ist };
+        })
+        .filter((x) => x.cnt > 0 && x.ist > 0)
+        .sort((a, b) => b.ist - a.ist);
+
+      // Lottery drops: Vex+ (per-rune probability; Poisson approx)
+      const probByRune = row.vexPlusProbByRune ?? {};
+      const lottery = Object.entries(probByRune)
+        .map(([k, p]) => ({ item: String(k), p: Number(p ?? 0) }))
+        .filter((x) => x.p > 0)
+        .sort((a, b) => b.p - a.p);
 
       el("detail").innerHTML = `
-        <div class="pill">selected <strong>${row.name}</strong></div>
-        <div class="pill">EV/run <strong>${fmt(row.istPerRun,6)}</strong> IST</div>
-        <div class="pill">EV/hour <strong>${fmt(row.istPerHour,4)}</strong> IST</div>
-        <div class="pill">Vex+ prob/run <strong>${fmt((row.vexPlusProb ?? 0)*100,2)}%</strong></div>
-        <div class="pill">min/run <strong>${fmt(minutesPerRun,2)}</strong></div>
-        <div class="pill">killPct <strong>${fmt(killPct,2)}</strong></div>
-        ${miss ? `<div class="pill" style="color:var(--warn)">missing TC <strong>${miss}</strong></div>` : ""}
-
-        <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-          <div class="small">Per-map settings</div>
-          <button class="btn" id="btnToggleEdit" style="width:auto; padding:8px 10px; border-radius:12px;">${isEditing ? "Close" : "Edit"}</button>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="font-weight:900;">${row.name}</div>
+          <button class="btn" id="btnToggleEdit" style="width:auto; padding:8px 10px; border-radius:12px;">${isEditing ? "Close" : "Edit time"}</button>
         </div>
 
         ${isEditing ? `
           <div style="margin-top:10px;">
-            <label>killPct (0–1)</label>
-            <input id="editKillPct" type="number" min="0" max="1" step="0.01" value="${fmt(killPct,2)}" />
             <label>minutes per run</label>
             <input id="editMinutes" type="number" min="0.1" step="0.1" value="${fmt(minutesPerRun,2)}" />
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
@@ -226,23 +256,39 @@
             </div>
             <div class="small" style="margin-top:8px;">Saved to your browser only (localStorage). Does not modify JSON files.</div>
           </div>
-        ` : `<div class="small" style="margin-top:10px;">Tip: click <span class="mono">Edit</span> to change <span class="mono">killPct</span> and <span class="mono">minutes/run</span> for this map.</div>`}
+        ` : `<div class="small" style="margin-top:8px;">Tip: click <span class="mono">Edit time</span> to change <span class="mono">minutes/run</span> for this map.</div>`}
 
-        <div style="margin-top:14px;" class="small">Top item contributors (IST/run):</div>
+        <div style="margin-top:14px;" class="small"><strong>Predictable Drops</strong> (>=1% per-mob; priced items only)</div>
         <table style="margin-top:6px; width:100%; border-collapse:collapse;">
-          <tr><th>Item</th><th class="right">IST/run</th></tr>
-          ${items.map(([k,v])=>`<tr><td class="mono">${k}</td><td class="mono right">${fmt(v,6)}</td></tr>`).join("")}
+          <tr><th>Item</th><th class="right">Expected/run</th><th class="right">IST/run</th></tr>
+          ${predictable.length
+            ? predictable.map((x) => `
+                <tr>
+                  <td class="mono">${x.item}</td>
+                  <td class="mono right">${fmt(x.cnt,6)}</td>
+                  <td class="mono right">${fmt(x.ist,6)}</td>
+                </tr>
+              `).join("")
+            : `<tr><td colspan="3" class="small" style="color:var(--muted)">No predictable priced drops found (>=1% + priced).</td></tr>`
+          }
         </table>
-        ${items.length ? "" : `<div class="small" style="margin-top:8px; color:var(--warn)">No priced items found in this run (check tables).</div>`}
 
-        <div style="margin-top:14px;" class="small">Vex+ lottery (expected count per run; used as prob approximation):</div>
+        <div style="margin-top:14px;" class="small"><strong>Lottery Drops</strong> (&lt;1% per-mob; Vex+ only)</div>
+        <div class="small" style="margin-top:6px; color:var(--muted)">Combined Vex+ odds: <span class="mono">${odds(row.vexPlusProb)}</span></div>
         <table style="margin-top:6px; width:100%; border-collapse:collapse;">
-          <tr><th>Rune</th><th class="right">Expected/run</th></tr>
-          ${vexRows.length ? vexRows.map(([k,v])=>`<tr><td class="mono">${k}</td><td class="mono right">${fmt(v,8)}</td></tr>`).join("") : `<tr><td colspan="2" class="small" style="color:var(--muted)">No Vex+ probability found in this run (check TC table).</td></tr>`}
+          <tr><th>Item</th><th class="right">Odds</th></tr>
+          ${lottery.length
+            ? lottery.map((x) => `
+                <tr>
+                  <td class="mono">${x.item}</td>
+                  <td class="mono right">${odds(x.p)}</td>
+                </tr>
+              `).join("")
+            : `<tr><td colspan="2" class="small" style="color:var(--muted)">No Vex+ probabilities found in this run (check TC table).</td></tr>`
+          }
         </table>
       `;
 
-      // wire editor buttons
       const btnToggle = document.getElementById("btnToggleEdit");
       if (btnToggle) {
         btnToggle.addEventListener("click", () => {
@@ -250,19 +296,19 @@
           render();
         });
       }
+
       const btnSave = document.getElementById("btnSave");
       if (btnSave) {
         btnSave.addEventListener("click", () => {
-          const k = Number(document.getElementById("editKillPct")?.value);
           const m = Number(document.getElementById("editMinutes")?.value);
           const ov = overrides[row.mapId] ?? {};
-          ov.killModel = { ...(ov.killModel ?? {}), killPct: Number.isFinite(k) ? Math.max(0, Math.min(1, k)) : killPct };
           ov.time = { ...(ov.time ?? {}), minutesPerRun: Number.isFinite(m) ? Math.max(0.1, m) : minutesPerRun };
           overrides[row.mapId] = ov;
           saveOverrides();
           render();
         });
       }
+
       const btnReset = document.getElementById("btnReset");
       if (btnReset) {
         btnReset.addEventListener("click", () => {
@@ -298,11 +344,11 @@
           istPerRun,
           istPerHour,
           minutesPerRun,
-          killPct: Number(run.killModel?.killPct ?? 1),
           byItemIst: ev.predictable.byItemIst,
           missingTc: ev.missingTc,
           vexPlusProb,
           vexPlusExpected: ev.lottery.vexPlusExpected,
+          vexPlusProbByRune: ev.lottery.vexPlusProbByRune,
           expectedDrops: ev.predictable.expectedDrops
         });
       }
@@ -318,7 +364,6 @@
           <th class="right">IST/hour</th>
           <th class="right">Vex+ prob/run</th>
           <th class="right">min/run</th>
-          <th class="right">killPct</th>
         </tr>
         ${rows.map(r => `
           <tr data-id="${r.mapId}" style="cursor:pointer">
@@ -328,7 +373,6 @@
             <td class="mono right">${fmt(r.istPerHour,4)}</td>
             <td class="mono right">${fmt(r.vexPlusProb*100,2)}%</td>
             <td class="mono right">${fmt(r.minutesPerRun,2)}</td>
-            <td class="mono right">${fmt(r.killPct,2)}</td>
           </tr>
         `).join("")}
       `;

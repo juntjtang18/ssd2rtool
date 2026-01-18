@@ -10,8 +10,10 @@
   "time": {
     "minutesPerRun": 1.58
   },
-  "killModel": {
-    "killPct": 0.03,
+  "base": {
+    "useMapTcCounts": false
+  },
+  "tcOverride": {
     "tcZero": [
       "Council (H)"
     ]

@@ -1,14 +1,15 @@
 // /model/mapEvCore.js
 // Map EV model (currency-only) with a split:
 //   PredictableValue: only drops with per-mob probability >= 1%
-//   LotteryValue: probability of getting at least one Vex+ rune (approximated by sum of tiny probs)
+//   LotteryValue: probability of getting at least one Vex+ rune (Poisson approx)
 //
 // PredictableValue (IST/run):
 //   sum_tc( Nt * sum_item( V_item * P_tc_item ) ) for P_tc_item >= 0.01
 //
 // LotteryValue (prob/run):
-//   P(Vex+ at least one) ~= sum_over_VexPlus( sum_tc( Nt * P_tc_rune ) ) for P_tc_rune < 0.01
-//   (capped at 1.0)
+//   Let lambda = sum_over_VexPlus( expected_count_per_run(rune) )
+//   Then P(at least one Vex+ rune) ~= 1 - exp(-lambda)
+//   Per-rune: P(at least one of rune R) ~= 1 - exp(-lambda_R)
 //
 // Inputs:
 //  - /config/rune-price-table.json (phase-based pricing; V_item in Ist)
@@ -67,23 +68,32 @@ export function priceInIst(itemKey, phaseData) {
 }
 
 export function deriveRunTcCounts(mapTcCounts, runCfg) {
-  const killModel = runCfg?.killModel ?? {};
+  // NOTE: killPct has been removed.
+  // We now support either:
+  //  - baseline map tcCounts (default)
+  //  - tcSet-only runs (base.useMapTcCounts=false) for boss rushes / measured runs
+  // Back-compat: if legacy runCfg.killModel exists, we still read tcMul/tcZero.
+  const legacyKillModel = runCfg?.killModel ?? {};
+  const tcOverride = runCfg?.tcOverride ?? {};
   const guaranteed = runCfg?.guaranteed ?? {};
 
-  const killPct = Number(killModel.killPct ?? 1);
-  const tcMul = killModel.tcMul ?? {};
-  const tcZero = new Set((killModel.tcZero ?? []).map(String));
+  const useMapTcCounts = runCfg?.base?.useMapTcCounts !== false;
+
+  const tcMul = tcOverride.tcMul ?? legacyKillModel.tcMul ?? {};
+  const tcZero = new Set([...(tcOverride.tcZero ?? []), ...(legacyKillModel.tcZero ?? [])].map(String));
 
   const tcSet = guaranteed.tcSet ?? {};
   const tcAdd = guaranteed.tcAdd ?? {};
 
   const out = {};
 
-  // 1) base * killPct
-  for (const [tc, n] of Object.entries(mapTcCounts ?? {})) {
-    const base = Number(n ?? 0);
-    if (!Number.isFinite(base) || base <= 0) continue;
-    out[tc] = base * (Number.isFinite(killPct) ? killPct : 1);
+  // 1) baseline map tcCounts (optional)
+  if (useMapTcCounts) {
+    for (const [tc, n] of Object.entries(mapTcCounts ?? {})) {
+      const base = Number(n ?? 0);
+      if (!Number.isFinite(base) || base <= 0) continue;
+      out[tc] = base;
+    }
   }
 
   // 2) tcMul overrides
@@ -131,7 +141,7 @@ export function computeMapEvModel({
   const expectedDrops = {}; // expected count per run (for predictable items only)
 
   // Lottery (Vex+)
-  const vexPlusExpected = {}; // expected count per rune per run (used as prob approx)
+  const vexPlusExpected = {}; // expected count (lambda) per rune per run
 
   const missingTc = [];
 
@@ -170,7 +180,15 @@ export function computeMapEvModel({
     }
   }
 
-  const vexPlusProbApprox = Math.min(1, Object.values(vexPlusExpected).reduce((a, b) => a + Number(b || 0), 0));
+  const lambdaTotal = Object.values(vexPlusExpected).reduce((a, b) => a + Number(b || 0), 0);
+  const vexPlusProb = 1 - Math.exp(-Math.max(0, lambdaTotal));
+
+  // Per-rune probability (at least one) using Poisson approximation
+  const vexPlusProbByRune = {};
+  for (const [r, lam] of Object.entries(vexPlusExpected)) {
+    const l = Math.max(0, Number(lam || 0));
+    vexPlusProbByRune[r] = 1 - Math.exp(-l);
+  }
 
   return {
     predictable: {
@@ -179,8 +197,9 @@ export function computeMapEvModel({
       expectedDrops,
     },
     lottery: {
-      vexPlusProb: vexPlusProbApprox,
+      vexPlusProb,
       vexPlusExpected,
+      vexPlusProbByRune,
     },
     missingTc,
   };

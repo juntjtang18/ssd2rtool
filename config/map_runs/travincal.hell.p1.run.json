@@ -10,8 +10,8 @@
   "time": {
     "minutesPerRun": 2.0
   },
-  "killModel": {
-    "killPct": 0.0
+  "base": {
+    "useMapTcCounts": false
   },
   "guaranteed": {
     "tcSet": {

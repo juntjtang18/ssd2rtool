@@ -10,9 +10,6 @@
   "time": {
     "minutesPerRun": 4.0
   },
-  "killModel": {
-    "killPct": 0.5
-  },
   "guaranteed": {
     "tcSet": {}
   }

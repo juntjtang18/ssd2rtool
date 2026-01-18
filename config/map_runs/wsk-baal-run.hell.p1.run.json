@@ -10,9 +10,6 @@
   "time": {
     "minutesPerRun": 3.5
   },
-  "killModel": {
-    "killPct": 0.25
-  },
   "guaranteed": {
     "tcSet": {
       "Baal (H)": 1

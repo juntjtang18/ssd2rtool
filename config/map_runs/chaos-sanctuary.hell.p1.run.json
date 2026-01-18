@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "1.2",
   "mapId": "chaos-sanctuary",
   "label": "Seal run (test-based: ~110 mobs + 3 seal packs + Diablo)",
   "assumptions": {
@@ -8,10 +8,10 @@
     "party": 1
   },
   "time": {
-    "minutesPerRun": 3.0
+    "minutesPerRun": 10.0
   },
-  "killModel": {
-    "killPct": 0.0
+  "base": {
+    "useMapTcCounts": false
   },
   "testData": {
     "mobsPerRun_range": [100, 120],
