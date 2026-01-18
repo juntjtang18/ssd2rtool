@@ -87,6 +87,23 @@
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (x == null || Number.isNaN(Number(x))) ? "-" : Number(x).toFixed(d);
 
+    const nfInt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+    const oddsRuns = (p) => {
+      const x = Number(p ?? 0);
+      if (!(x > 0)) return "-";
+      const n = Math.max(1, Math.round(1 / x));
+      return `~1 / ${nfInt.format(n)} runs`;
+    };
+
+    // For leaderboard comparisons: convert a probability into an intuitive per-hour odds.
+    const oddsHours = (p) => {
+      const x = Number(p ?? 0);
+      if (!(x > 0)) return "-";
+      const hrs = 1 / x;
+      if (hrs < 100) return `~1 / ${hrs.toFixed(1)} hrs`;
+      return `~1 / ${nfInt.format(Math.round(hrs))} hrs`;
+    };
+
     let idx = null;
     let bundles = new Map();
     let phaseKey = null;
@@ -210,14 +227,6 @@
         return;
       }
 
-      const nfInt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
-      const odds = (p) => {
-        const x = Number(p ?? 0);
-        if (!(x > 0)) return "-";
-        const n = Math.max(1, Math.round(1 / x));
-        return `~1 / ${nfInt.format(n)} runs`;
-      };
-
       const runCfg = getEffectiveRunCfg(row.mapId);
       const minutesPerRun = Number(runCfg?.time?.minutesPerRun ?? row.minutesPerRun ?? 0);
       const isEditing = editOpenFor === row.mapId;
@@ -234,11 +243,37 @@
         .sort((a, b) => b.ist - a.ist);
 
       // Lottery drops: Vex+ (per-rune probability; Poisson approx)
-      const probByRune = row.vexPlusProbByRune ?? {};
+      // Robustness: if the page is running with an older cached JS module that
+      // didn't populate vexPlusProbByRune, fall back to deriving per-rune probs
+      // from vexPlusExpected (lambda) via p = 1 - exp(-lambda).
+      const expectedByRune = row.vexPlusExpected ?? {};
+      let probByRune = row.vexPlusProbByRune ?? {};
+      if ((!probByRune || Object.keys(probByRune).length === 0) && expectedByRune && Object.keys(expectedByRune).length) {
+        const derived = {};
+        for (const [k, lamRaw] of Object.entries(expectedByRune)) {
+          const lam = Math.max(0, Number(lamRaw ?? 0));
+          if (!(lam > 0)) continue;
+          const p = 1 - Math.exp(-lam);
+          if (p > 0) derived[String(k)] = p;
+        }
+        probByRune = derived;
+      }
+
       const lottery = Object.entries(probByRune)
         .map(([k, p]) => ({ item: String(k), p: Number(p ?? 0) }))
         .filter((x) => x.p > 0)
         .sort((a, b) => b.p - a.p);
+
+      // Combined Vex+ probability: prefer precomputed, but fall back to lambda sum if needed.
+      let combinedP = Number(row.vexPlusProb ?? 0);
+      if (!(combinedP > 0) && expectedByRune && Object.keys(expectedByRune).length) {
+        const lambda = Object.values(expectedByRune).reduce((a, b) => a + Number(b || 0), 0);
+        combinedP = 1 - Math.exp(-Math.max(0, lambda));
+      }
+
+      // Only show a combined odds line when we can also show the breakdown.
+      // (Avoid confusing situations like "combined odds shows" but list is empty.)
+      const showLottery = lottery.length > 0;
 
       el("detail").innerHTML = `
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
@@ -274,14 +309,14 @@
         </table>
 
         <div style="margin-top:14px;" class="small"><strong>Lottery Drops</strong> (&lt;1% per-mob; Vex+ only)</div>
-        <div class="small" style="margin-top:6px; color:var(--muted)">Combined Vex+ odds: <span class="mono">${odds(row.vexPlusProb)}</span></div>
+        <div class="small" style="margin-top:6px; color:var(--muted)">Combined Vex+ odds: <span class="mono">${showLottery ? oddsRuns(combinedP) : "-"}</span></div>
         <table style="margin-top:6px; width:100%; border-collapse:collapse;">
           <tr><th>Item</th><th class="right">Odds</th></tr>
-          ${lottery.length
+          ${showLottery
             ? lottery.map((x) => `
                 <tr>
                   <td class="mono">${x.item}</td>
-                  <td class="mono right">${odds(x.p)}</td>
+                  <td class="mono right">${oddsRuns(x.p)}</td>
                 </tr>
               `).join("")
             : `<tr><td colspan="2" class="small" style="color:var(--muted)">No Vex+ probabilities found in this run (check TC table).</td></tr>`
@@ -337,6 +372,11 @@
         const istPerRun = ev.predictable.istPerRun;
         const istPerHour = computePerHour(istPerRun, minutesPerRun);
         const vexPlusProb = ev.lottery.vexPlusProb;
+        // For comparisons, show probability within one hour (not per-run),
+        // using Poisson: p = 1 - exp(-lambda), where lambda_hour = lambda_run * runsPerHour.
+        const lambdaRun = Object.values(ev.lottery.vexPlusExpected ?? {}).reduce((a, v) => a + Number(v ?? 0), 0);
+        const runsPerHour = minutesPerRun > 0 ? (60 / minutesPerRun) : 0;
+        const vexPlusProbHour = runsPerHour > 0 ? (1 - Math.exp(-lambdaRun * runsPerHour)) : 0;
 
         rows.push({
           mapId: m.mapId,
@@ -347,6 +387,7 @@
           byItemIst: ev.predictable.byItemIst,
           missingTc: ev.missingTc,
           vexPlusProb,
+          vexPlusProbHour,
           vexPlusExpected: ev.lottery.vexPlusExpected,
           vexPlusProbByRune: ev.lottery.vexPlusProbByRune,
           expectedDrops: ev.predictable.expectedDrops
@@ -362,7 +403,7 @@
           <th></th>
           <th class="right">IST/run</th>
           <th class="right">IST/hour</th>
-          <th class="right">Vex+ prob/run</th>
+          <th class="right">Vex+ odds/hour</th>
           <th class="right">min/run</th>
         </tr>
         ${rows.map(r => `
@@ -371,7 +412,7 @@
             <td class="right"><button data-gear="${r.mapId}" title="Edit" style="cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:var(--text); border-radius:10px; padding:6px 9px;">⚙️</button></td>
             <td class="mono right">${fmt(r.istPerRun,6)}</td>
             <td class="mono right">${fmt(r.istPerHour,4)}</td>
-            <td class="mono right">${fmt(r.vexPlusProb*100,2)}%</td>
+            <td class="mono right">${oddsHours(r.vexPlusProbHour)}</td>
             <td class="mono right">${fmt(r.minutesPerRun,2)}</td>
           </tr>
         `).join("")}
