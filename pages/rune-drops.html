@@ -46,55 +46,73 @@
     .pillbar{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
     .pill{ display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.18); font-size:12px; color:var(--muted); }
     .pill strong{ color:var(--text); font-family:var(--mono); }
+
+    .topbar{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .langbox{ display:flex; align-items:center; gap:8px; margin-top: 2px; }
+    .langbox .globe{ font-size: 16px; opacity:.9; }
+    .langbox select{ width: 140px; padding: 9px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.22); color:var(--text); font-size: 14px; }
   </style>
 </head>
 
 <body>
   <div class="wrap">
-    <h1>Boss Rune Drop Rates</h1>
-    <div class="sub">
-      Table values are based on <span class="mono">expected drop count per kill</span> (not "chance of at least one").
-      Click a rune name (left column) to sort bosses by that rune.
+    <div class="topbar">
+      <div>
+        <h1 data-i18n="h1">Boss Rune Drop Rates</h1>
+        <div class="sub" data-i18n-html="sub">
+          Table values are based on <span class="mono">expected drop count per kill</span> (not "chance of at least one").
+          Click a rune name (left column) to sort bosses by that rune.
+        </div>
+      </div>
+
+      <div class="langbox" data-i18n-title="lang.title">
+        <span class="globe">🌐</span>
+        <select id="langSel" data-i18n-aria-label="lang.aria">
+          <option value="zh-Hant" data-i18n="lang.zhHant">繁體</option>
+          <option value="zh-Hans" data-i18n="lang.zhHans">简体</option>
+          <option value="en" data-i18n="lang.en">EN</option>
+        </select>
+      </div>
     </div>
 
     <div class="card" style="margin-top:14px; margin-bottom:16px;">
       <div class="controls">
         <div class="ctrl">
-          <label>Display</label>
+          <label data-i18n="ctrl.display">Display</label>
           <select id="fmtSel">
-            <option value="perkill">Per kill (scientific)</option>
-            <option value="onein">1:N (DropCalc style)</option>
-            <option value="per10k">Per 10,000 kills</option>
-            <option value="per1m">Per 1,000,000 kills</option>
+            <option value="perkill" data-i18n="opt.perkill">Per kill (scientific)</option>
+            <option value="onein" data-i18n="opt.onein">1:N (DropCalc style)</option>
+            <option value="per10k" data-i18n="opt.per10k">Per 10,000 kills</option>
+            <option value="per1m" data-i18n="opt.per1m">Per 1,000,000 kills</option>
           </select>
         </div>
 
         <div class="ctrl" style="min-width:180px;">
-          <label>Precision</label>
+          <label data-i18n="ctrl.precision">Precision</label>
           <select id="precSel">
-            <option value="2">Compact</option>
-            <option value="3" selected>Normal</option>
-            <option value="5">Detailed</option>
+            <option value="2" data-i18n="prec.compact">Compact</option>
+            <option value="3" selected data-i18n="prec.normal">Normal</option>
+            <option value="5" data-i18n="prec.detailed">Detailed</option>
           </select>
         </div>
 
         <div class="ctrl">
-          <label>Rows</label>
+          <label data-i18n="ctrl.rows">Rows</label>
           <div class="checkline">
             <input id="showAll" type="checkbox" />
-            <span>Show all runes from price table (otherwise: high runes only)</span>
+            <span data-i18n="ctrl.showAll">Show all runes from price table (otherwise: high runes only)</span>
           </div>
         </div>
 
         <div class="ctrl" style="min-width:260px;">
-          <label>Dataset</label>
+          <label data-i18n="ctrl.dataset">Dataset</label>
           <div class="pillbar" id="metaPills"></div>
         </div>
       </div>
 
       <div class="err" id="loadErr" style="display:none; margin-top:10px;"></div>
       <div class="sub" style="margin-top:10px;">
-        <a href="../index.html">&lt;- Back</a>
+        <a href="../index.html" data-i18n="nav.back">&lt;- Back</a>
       </div>
     </div>
 
@@ -106,7 +124,7 @@
         </table>
       </div>
       <div class="sub" style="margin-top:10px;">
-        Tip: when a rune is selected for sorting, bosses are reordered left-to-right by that rune's drop rate.
+        <span data-i18n="tip.sort">Tip: when a rune is selected for sorting, bosses are reordered left-to-right by that rune's drop rate.</span>
       </div>
     </div>
   </div>
@@ -114,8 +132,30 @@
   <script type="module">
     import { loadPriceTable, normRune } from "../model/priceTable.js";
     import { BOSSES, loadBossDropsByFileId, formatBossMeta } from "../model/rpk.js";
+    import { detectLang, loadI18nJson, makeT, applyI18nToDom } from "../model/i18n.js";
 
     const el = (id) => document.getElementById(id);
+
+    // i18n
+    let dict = null;
+    let t = (key, vars=null) => key;
+
+    function applyLang(lang, { rerender = true } = {}) {
+      localStorage.setItem("lang", lang);
+      t = makeT(dict, lang);
+      document.documentElement.lang = lang;
+      document.title = t("title");
+      applyI18nToDom(t);
+      el("langSel").value = lang;
+      if (rerender) render();
+    }
+
+    async function initI18n() {
+      dict = await loadI18nJson("../i18n/rune-drops.json");
+      const lang = detectLang();
+      applyLang(lang, { rerender: false });
+      el("langSel").addEventListener("change", () => applyLang(el("langSel").value));
+    }
 
     const EXCLUDE = new Set(["PG","PA","FG","FA","UKEY"]);
     // Default view: high runes only (always include ZOD even if not priced).
@@ -222,18 +262,18 @@
       const meta = formatBossMeta(first);
       const bossCount = (bossesData || []).length;
       const modeLabel = (
-        fmtMode === "onein" ? "1:N" :
-        fmtMode === "per10k" ? "per 10k" :
-        fmtMode === "per1m" ? "per 1M" :
-        "scientific"
+        fmtMode === "onein" ? t("mode.onein") :
+        fmtMode === "per10k" ? t("mode.per10k") :
+        fmtMode === "per1m" ? t("mode.per1m") :
+        t("mode.scientific")
       );
       const pills = [
-        `<span class="pill">dataset <strong>${meta || "-"}</strong></span>`,
-        `<span class="pill">bosses <strong>${bossCount}</strong></span>`,
-        `<span class="pill">mode <strong>${modeLabel}</strong></span>`,
-        `<span class="pill">precision <strong>${precision}</strong></span>`,
+        `<span class="pill">${t("pill.dataset")} <strong>${meta || "-"}</strong></span>`,
+        `<span class="pill">${t("pill.bosses")} <strong>${bossCount}</strong></span>`,
+        `<span class="pill">${t("pill.mode")} <strong>${modeLabel}</strong></span>`,
+        `<span class="pill">${t("pill.precision")} <strong>${precision}</strong></span>`,
       ];
-      if (sortRune) pills.push(`<span class="pill">sorted <strong>${sortRune} ${sortDir === "desc" ? "down" : "up"}</strong></span>`);
+      if (sortRune) pills.push(`<span class="pill">${t("pill.sorted")} <strong>${sortRune} ${sortDir === "desc" ? t("pill.down") : t("pill.up")}</strong></span>`);
       el("metaPills").innerHTML = pills.join("");
     }
 
@@ -257,7 +297,7 @@
       const thead = el("thead");
       thead.innerHTML = "";
       const hr = document.createElement("tr");
-      hr.innerHTML = `<th class="corner">Rune</th>` + bossOrder.map(b => `<th class="mono">${b.label}</th>`).join("");
+      hr.innerHTML = `<th class="corner">${t("tbl.rune")}</th>` + bossOrder.map(b => `<th class="mono">${b.label}</th>`).join("");
       thead.appendChild(hr);
 
       // body
@@ -273,7 +313,7 @@
         const td0 = document.createElement("td");
         td0.className = "sticky runeBtn mono";
         td0.innerHTML = `${r} <span class="hint">${arrow}</span>`;
-        td0.title = "Click to sort bosses by this rune";
+        td0.title = t("tip.clickToSort");
         td0.onclick = () => {
           if (sortRune === r) {
             sortDir = (sortDir === "desc") ? "asc" : "desc";
@@ -316,6 +356,8 @@
       try {
         priceTable = await loadPriceTable();
         bossesData = await loadBossesData();
+
+        await initI18n();
 
         // wire controls
         el("showAll").checked = showAll;

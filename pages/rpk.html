@@ -43,67 +43,85 @@
     .unit{ font-size:12px; color:var(--muted); margin-left:8px; font-weight:800; }
 
     .err{ font-size:12px; color:var(--bad); white-space:pre-wrap; }
+
+    .topbar{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .langbox{ display:flex; align-items:center; gap:8px; margin-top: 2px; }
+    .langbox .globe{ font-size: 16px; opacity:.9; }
+    .langbox select{ width: 140px; padding: 9px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.22); color:var(--text); font-size: 14px; }
   </style>
 </head>
 
 <body>
   <div class="wrap">
-    <h1>Boss RPK (Revenue Per Kill)</h1>
-    <div class="sub">
-      RPK(boss) = Σ ( DropCountPerKill(item) × PriceIst(item) ).
-      Uses pre-distilled Hell /players1 boss drops from <span class="mono">/config/boss_drops</span>.
+    <div class="topbar">
+      <div>
+        <h1 data-i18n="h1">Boss RPK (Revenue Per Kill)</h1>
+        <div class="sub" data-i18n-html="sub">
+          RPK(boss) = Σ ( DropCountPerKill(item) × PriceIst(item) ).
+          Uses pre-distilled Hell /players1 boss drops from <span class="mono">/config/boss_drops</span>.
+        </div>
+      </div>
+
+      <div class="langbox" data-i18n-title="lang.title">
+        <span class="globe">🌐</span>
+        <select id="langSel" data-i18n-aria-label="lang.aria">
+          <option value="zh-Hant" data-i18n="lang.zhHant">繁體</option>
+          <option value="zh-Hans" data-i18n="lang.zhHans">简体</option>
+          <option value="en" data-i18n="lang.en">EN</option>
+        </select>
+      </div>
     </div>
 
     <div class="card" style="margin-top:14px; margin-bottom:16px;">
       <div class="row" style="grid-template-columns:1fr 1fr;">
         <div>
-          <label>Price phase</label>
+          <label data-i18n="pricePhase">Price phase</label>
           <select id="phaseSel"></select>
-          <div class="sub">Source: <span class="mono">/config/rune-price-table.json</span></div>
+          <div class="sub" data-i18n-html="pricePhaseSource">Source: <span class="mono">/config/rune-price-table.json</span></div>
         </div>
         <div>
-          <label>Dataset</label>
+          <label data-i18n="dataset">Dataset</label>
           <div class="pillbar" id="metaPills"></div>
         </div>
       </div>
       <div class="err" id="loadErr" style="display:none; margin-top:10px;"></div>
       <div class="sub" style="margin-top:10px;">
-        <a href="../index.html">← Back</a>
+        <a href="../index.html" data-i18n="nav.back">← Back</a>
       </div>
     </div>
 
     <div class="row">
       <div class="card">
-        <h2 style="margin:0 0 10px; font-size:15px; color:var(--muted);">Leaderboard</h2>
+        <h2 style="margin:0 0 10px; font-size:15px; color:var(--muted);" data-i18n="leaderboard.title">Leaderboard</h2>
         <table>
           <thead>
             <tr>
-              <th>Boss</th>
-              <th class="num">RPK (Ist/kill)</th>
-              <th class="num">/100 kills</th>
+              <th data-i18n="tbl.boss">Boss</th>
+              <th class="num" data-i18n="tbl.rpk">RPK (Ist/kill)</th>
+              <th class="num" data-i18n="tbl.per100">/100 kills</th>
             </tr>
           </thead>
           <tbody id="bossTable"></tbody>
         </table>
         <div class="sub" style="margin-top:10px;">
-          Tip: click a boss row to see item breakdown.
+          <span data-i18n="tip.clickRow">Tip: click a boss row to see item breakdown.</span>
         </div>
       </div>
 
       <div class="card">
-        <h2 style="margin:0 0 10px; font-size:15px; color:var(--muted);">Breakdown</h2>
-        <div class="sub" id="pickedMeta">Pick a boss from the left.</div>
+        <h2 style="margin:0 0 10px; font-size:15px; color:var(--muted);" data-i18n="breakdown.title">Breakdown</h2>
+        <div class="sub" id="pickedMeta" data-i18n="breakdown.pick">Pick a boss from the left.</div>
         <div style="margin-top:10px;">
-          <div class="hero"><span id="pickedRpk">—</span><span class="unit">Ist/kill</span></div>
+          <div class="hero"><span id="pickedRpk">—</span><span class="unit" data-i18n="unit.istPerKill">Ist/kill</span></div>
         </div>
         <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.06);"></div>
         <table style="margin-top:10px;">
           <thead>
             <tr>
-              <th>Item</th>
-              <th class="num">Drop/kill</th>
-              <th class="num">Price (Ist)</th>
-              <th class="num">Value/kill</th>
+              <th data-i18n="tbl2.item">Item</th>
+              <th class="num" data-i18n="tbl2.dropPerKill">Drop/kill</th>
+              <th class="num" data-i18n="tbl2.priceIst">Price (Ist)</th>
+              <th class="num" data-i18n="tbl2.valuePerKill">Value/kill</th>
             </tr>
           </thead>
           <tbody id="itemTable"></tbody>
@@ -115,6 +133,7 @@
   <script type="module">
     import { loadPriceTable, getRuneQuote } from "../model/priceTable.js";
     import { BOSSES, loadAllBossDrops, computeBossRpk, formatBossMeta } from "../model/rpk.js";
+    import { detectLang, loadI18nJson, makeT, applyI18nToDom } from "../model/i18n.js";
 
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=6) => (x == null || Number.isNaN(Number(x))) ? "—" : Number(x).toFixed(d);
@@ -123,6 +142,27 @@
     let priceTable = null;
     let phaseKey = null;
     let bossesData = null; // [{id,label,data}, ...]
+
+    // i18n
+    let dict = null;
+    let t = (key, vars=null) => key;
+
+    function applyLang(lang, { rerender = true } = {}) {
+      localStorage.setItem("lang", lang);
+      t = makeT(dict, lang);
+      document.documentElement.lang = lang;
+      document.title = t("title");
+      applyI18nToDom(t);
+      el("langSel").value = lang;
+      if (rerender) renderAll();
+    }
+
+    async function initI18n() {
+      dict = await loadI18nJson("../i18n/rpk.json");
+      const lang = detectLang();
+      applyLang(lang, { rerender: false });
+      el("langSel").addEventListener("change", () => applyLang(el("langSel").value));
+    }
 
     function setErr(msg) {
       const box = el("loadErr");
@@ -138,7 +178,7 @@
       phaseKey = phaseKey || d;
 
       const sel = el("phaseSel");
-      sel.innerHTML = keys.map(k => `<option value="${k}">Phase ${k}</option>`).join("");
+      sel.innerHTML = keys.map(k => `<option value="${k}">${t("phase", { k })}</option>`).join("");
       sel.value = phaseKey;
       sel.onchange = () => {
         phaseKey = sel.value;
@@ -153,9 +193,9 @@
       const q = getRuneQuote(priceTable, phaseKey, "UKEY");
       const keyPrice = (q?.priceIst ?? 0);
       const pills = [
-        `<span class="pill">dataset <strong>${meta || "—"}</strong></span>`,
-        `<span class="pill">phase <strong>${phaseKey}</strong></span>`,
-        `<span class="pill">UKEY <strong>${fmt(keyPrice,6)}</strong> Ist</span>`,
+        `<span class="pill">${t("pill.dataset")} <strong>${meta || "—"}</strong></span>`,
+        `<span class="pill">${t("pill.phase")} <strong>${phaseKey}</strong></span>`,
+        `<span class="pill">UKEY <strong>${fmt(keyPrice,6)}</strong> ${t("unit.ist")}</span>`,
       ];
       el("metaPills").innerHTML = pills.join("");
     }
@@ -209,7 +249,7 @@
 
       if (!list.length) {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td class="sub" colspan="4">No priced items found for this boss in the selected phase.</td>`;
+        tr.innerHTML = `<td class="sub" colspan="4">${t("breakdown.noPriced")}</td>`;
         body.appendChild(tr);
       }
     }
@@ -222,6 +262,7 @@
     async function main() {
       try {
         setErr(null);
+        await initI18n();
         priceTable = await loadPriceTable();
         bossesData = await loadAllBossDrops(BOSSES);
 

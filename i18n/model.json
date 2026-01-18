@@ -1,0 +1,152 @@
+{
+  "en": {
+    "title": "SSD2R Tool — Keys Model",
+    "lang.title": "Language",
+    "lang.aria": "Select language",
+    "lang.zhHant": "繁體",
+    "lang.zhHans": "简体",
+    "lang.en": "EN",
+
+    "h1": "D2R Keys Model (Theory EV) — key-by-key rotation, extras only from Countess",
+    "pricePhase": "Price phase",
+    "modelParams": "Model parameters",
+    "keyValueNote": "Key value: 1 key = 1/3 Ist. Bonus is shown separately (EV only).",
+
+    "sec1.title": "1) Target Ist → required hours + EV drops",
+    "sec1.targetIst": "Target Ist (exclude bonus)",
+    "sec2.title": "2) Target hours → predicted Ist/h",
+    "sec2.hours": "Hours",
+    "btn.calculate": "Calculate",
+
+    "phase": "Phase {k}",
+
+    "unit.min": "min",
+    "unit.hour": "hour",
+    "unit.ist": "Ist",
+    "unit.istPerHour": "Ist/hour",
+
+    "stat.Dc": "Dc",
+    "stat.Ds": "Ds",
+    "stat.Dn": "Dn",
+    "stat.tC": "tC",
+    "stat.tS": "tS",
+    "stat.tN": "tN",
+    "stat.cycle": "cycle (1 key each)",
+    "stat.pricesLoaded": "prices loaded",
+
+    "none": "(none)",
+
+    "out.farmingTime": "Farming Time",
+    "out.predictedRevenue": "Predicted Revenue",
+    "out.totalRevenue": "Total revenue",
+    "out.key": "Key",
+    "out.extras": "Extras",
+    "out.bonusNotGuaranteed": "Bonus (Not guaranteed)",
+    "out.farmingTimeByBoss": "Farming time (by boss)",
+    "out.drops": "Drops",
+
+    "boss.countess": "Countess",
+    "boss.summoner": "Summoner",
+    "boss.nihla": "Nihlathak"
+  },
+  "zh-Hant": {
+    "title": "SSD2R 工具 — 鑰匙模型",
+    "lang.title": "語言",
+    "lang.aria": "選擇語言",
+    "lang.zhHant": "繁體",
+    "lang.zhHans": "简体",
+    "lang.en": "EN",
+
+    "h1": "D2R 鑰匙模型（理論 EV）— 逐把輪轉，額外掉落僅算女伯爵",
+    "pricePhase": "賽季階段",
+    "modelParams": "模型參數",
+    "keyValueNote": "鑰匙估值：1 把鑰匙 = 1/3 Ist。額外（Bonus）會分開顯示（僅 EV）。",
+
+    "sec1.title": "1）目標 Ist → 需要多少小時 + EV 掉落",
+    "sec1.targetIst": "目標 Ist（不含 Bonus）",
+    "sec2.title": "2）目標小時 → 預測 Ist/小時",
+    "sec2.hours": "小時",
+    "btn.calculate": "計算",
+
+    "phase": "第 {k} 階段",
+
+    "unit.min": "分鐘",
+    "unit.hour": "小時",
+    "unit.ist": "Ist",
+    "unit.istPerHour": "Ist/小時",
+
+    "stat.Dc": "Dc",
+    "stat.Ds": "Ds",
+    "stat.Dn": "Dn",
+    "stat.tC": "tC",
+    "stat.tS": "tS",
+    "stat.tN": "tN",
+    "stat.cycle": "輪轉（每種 1 把鑰匙）",
+    "stat.pricesLoaded": "價格已載入",
+
+    "none": "（無）",
+
+    "out.farmingTime": "刷圖時間",
+    "out.predictedRevenue": "預測收益",
+    "out.totalRevenue": "總收益",
+    "out.key": "鑰匙",
+    "out.extras": "額外掉落",
+    "out.bonusNotGuaranteed": "額外（不保證）",
+    "out.farmingTimeByBoss": "各 Boss 刷圖時間",
+    "out.drops": "掉落",
+
+    "boss.countess": "女伯爵",
+    "boss.summoner": "召喚者",
+    "boss.nihla": "尼拉塞克"
+  },
+  "zh-Hans": {
+    "title": "SSD2R 工具 — 钥匙模型",
+    "lang.title": "语言",
+    "lang.aria": "选择语言",
+    "lang.zhHant": "繁體",
+    "lang.zhHans": "简体",
+    "lang.en": "EN",
+
+    "h1": "D2R 钥匙模型（理论 EV）— 逐把轮转，额外掉落仅算女伯爵",
+    "pricePhase": "赛季阶段",
+    "modelParams": "模型参数",
+    "keyValueNote": "钥匙估值：1 把钥匙 = 1/3 Ist。额外（Bonus）会分开显示（仅 EV）。",
+
+    "sec1.title": "1）目标 Ist → 需要多少小时 + EV 掉落",
+    "sec1.targetIst": "目标 Ist（不含 Bonus）",
+    "sec2.title": "2）目标小时 → 预测 Ist/小时",
+    "sec2.hours": "小时",
+    "btn.calculate": "计算",
+
+    "phase": "第 {k} 阶段",
+
+    "unit.min": "分钟",
+    "unit.hour": "小时",
+    "unit.ist": "Ist",
+    "unit.istPerHour": "Ist/小时",
+
+    "stat.Dc": "Dc",
+    "stat.Ds": "Ds",
+    "stat.Dn": "Dn",
+    "stat.tC": "tC",
+    "stat.tS": "tS",
+    "stat.tN": "tN",
+    "stat.cycle": "轮转（每种 1 把钥匙）",
+    "stat.pricesLoaded": "价格已加载",
+
+    "none": "（无）",
+
+    "out.farmingTime": "刷图时间",
+    "out.predictedRevenue": "预测收益",
+    "out.totalRevenue": "总收益",
+    "out.key": "钥匙",
+    "out.extras": "额外掉落",
+    "out.bonusNotGuaranteed": "额外（不保证）",
+    "out.farmingTimeByBoss": "各 Boss 刷图时间",
+    "out.drops": "掉落",
+
+    "boss.countess": "女伯爵",
+    "boss.summoner": "召唤者",
+    "boss.nihla": "尼拉塞克"
+  }
+}

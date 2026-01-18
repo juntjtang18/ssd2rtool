@@ -1,0 +1,113 @@
+{
+  "en": {
+    "title": "SSD2R Tool — Boss RPK",
+    "lang.title": "Language",
+    "lang.aria": "Select language",
+    "lang.zhHant": "繁體",
+    "lang.zhHans": "简体",
+    "lang.en": "EN",
+
+    "h1": "Boss RPK (Ist per kill) — Solo Hell p1",
+    "sub": "RPK = expected <span class=\"mono\">IST/kill</span>, using only priced, currency-like drops. Formula: <span class=\"mono\">Σ (drop per kill × price in Ist)</span>.",
+
+    "pricePhase": "Price phase",
+    "pricePhaseSource": "/config/rune-price-table.json",
+    "dataset": "Dataset",
+    "leaderboard.title": "Leaderboard",
+    "tip.clickRow": "Tip: click a boss row to see the drop breakdown.",
+
+    "tbl.boss": "Boss",
+    "tbl.rpk": "IST/kill",
+    "tbl.per100": "IST/100 kills",
+
+    "breakdown.title": "Breakdown",
+    "breakdown.pick": "Pick a boss from the leaderboard.",
+    "breakdown.noPriced": "No priced items found for this boss in the selected phase.",
+
+    "tbl2.item": "Item",
+    "tbl2.dropPerKill": "Drop/kill",
+    "tbl2.priceIst": "Price (Ist)",
+    "tbl2.valuePerKill": "Value/kill",
+
+    "unit.ist": "Ist",
+    "unit.istPerKill": "Ist/kill",
+
+    "phase": "Phase {k}",
+    "pill.dataset": "dataset",
+    "pill.phase": "phase"
+  },
+  "zh-Hant": {
+    "title": "SSD2R 工具 — Boss RPK",
+    "lang.title": "語言",
+    "lang.aria": "選擇語言",
+    "lang.zhHant": "繁體",
+    "lang.zhHans": "简体",
+    "lang.en": "EN",
+
+    "h1": "Boss RPK（每次擊殺的 Ist）— 單人地獄 p1",
+    "sub": "RPK = 預期 <span class=\"mono\">Ist/擊殺</span>，僅計入可定價的貨幣型掉落。公式：<span class=\"mono\">Σ（每次擊殺掉落期望 × Ist 價格）</span>。",
+
+    "pricePhase": "價格階段",
+    "pricePhaseSource": "/config/rune-price-table.json",
+    "dataset": "資料集",
+    "leaderboard.title": "排行榜",
+    "tip.clickRow": "提示：點一下 Boss 列即可查看掉落拆解。",
+
+    "tbl.boss": "Boss",
+    "tbl.rpk": "Ist/擊殺",
+    "tbl.per100": "Ist/100 次擊殺",
+
+    "breakdown.title": "拆解",
+    "breakdown.pick": "請先從左側排行榜選一個 Boss。",
+    "breakdown.noPriced": "在所選階段下，這個 Boss 沒有可估值的掉落項。",
+
+    "tbl2.item": "物品",
+    "tbl2.dropPerKill": "掉落/擊殺",
+    "tbl2.priceIst": "價格（Ist）",
+    "tbl2.valuePerKill": "價值/擊殺",
+
+    "unit.ist": "Ist",
+    "unit.istPerKill": "Ist/擊殺",
+
+    "phase": "第{k}階段",
+    "pill.dataset": "資料集",
+    "pill.phase": "階段"
+  },
+  "zh-Hans": {
+    "title": "SSD2R 工具 — Boss RPK",
+    "lang.title": "语言",
+    "lang.aria": "选择语言",
+    "lang.zhHant": "繁體",
+    "lang.zhHans": "简体",
+    "lang.en": "EN",
+
+    "h1": "Boss RPK（每次击杀的 Ist）— 单人地狱 p1",
+    "sub": "RPK = 预期 <span class=\"mono\">Ist/击杀</span>，仅计入可定价的货币型掉落。公式：<span class=\"mono\">Σ（每次击杀掉落期望 × Ist 价格）</span>。",
+
+    "pricePhase": "价格阶段",
+    "pricePhaseSource": "/config/rune-price-table.json",
+    "dataset": "数据集",
+    "leaderboard.title": "排行榜",
+    "tip.clickRow": "提示：点击 Boss 行可查看掉落拆解。",
+
+    "tbl.boss": "Boss",
+    "tbl.rpk": "Ist/击杀",
+    "tbl.per100": "Ist/100 次击杀",
+
+    "breakdown.title": "拆解",
+    "breakdown.pick": "请先从左侧排行榜选择一个 Boss。",
+    "breakdown.noPriced": "在所选阶段下，这个 Boss 没有可估值的掉落项。",
+
+    "tbl2.item": "物品",
+    "tbl2.dropPerKill": "掉落/击杀",
+    "tbl2.priceIst": "价格（Ist）",
+    "tbl2.valuePerKill": "价值/击杀",
+
+    "unit.ist": "Ist",
+    "unit.istPerKill": "Ist/击杀",
+
+    "phase": "第{k}阶段",
+    "pill.dataset": "数据集",
+    "pill.phase": "阶段"
+  }
+}

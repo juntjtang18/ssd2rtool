@@ -1,0 +1,103 @@
+{
+  "en": {
+    "title": "SSD2R Tool — Map EV",
+    "lang.title": "Language",
+    "lang.aria": "Select language",
+    "lang.zhHant": "繁體",
+    "lang.zhHans": "简体",
+    "lang.en": "EN",
+
+    "h1": "D2R Map EV (currency-only) — Solo Hell p1",
+    "sub": "Inputs: price table (phase) + TC drop table + baseline map (from data) + run config.<br/>Notes: Uniques/sets not modeled. This is meant for comparing routes using tradable currency-like drops.",
+
+    "pricePhase": "Price phase",
+    "defaultsNote": "Defaults come from <span class=\"mono\">/config/map_runs/*.run.json</span>. Click <span class=\"mono\">⚙️</span> on a map to customize <span class=\"mono\">minutes/run</span> (saved locally).",
+
+    "leaderboard.title": "EV leaderboard",
+    "leaderboard.sort": "Sorted by Ist/hour using each map’s own run settings.",
+
+    "details.title": "Details",
+    "details.subtitle": "Predictable drops (>=1%) + lottery drops (<1%).",
+
+    "phase": "Phase {k}",
+
+    "odds.runs": "~1 / {n} runs",
+    "odds.hours": "~1 / {n} hrs",
+
+    "pill.map": "map",
+    "pill.phase": "phase",
+    "pill.run": "run",
+    "pill.unnamed": "(unnamed)",
+    "pill.missingTc": "missing TC in drop table: {n}",
+
+    "details.clickRow": "Click a row in the leaderboard."
+  },
+
+  "zh-Hant": {
+    "title": "SSD2R 工具 — 地圖 EV",
+    "lang.title": "語言",
+    "lang.aria": "選擇語言",
+    "lang.zhHant": "繁體",
+    "lang.zhHans": "简体",
+    "lang.en": "EN",
+
+    "h1": "D2R 地圖 EV（僅可流通貨幣）— 單人地獄 p1",
+    "sub": "輸入：價格表（階段）+ TC 掉落表 + 基準地圖資料 + 跑法設定。<br/>備註：未建模暗金/綠裝。主要用來比較各路線在可流通貨幣掉落上的效率。",
+
+    "pricePhase": "賽季階段",
+    "defaultsNote": "預設值來自 <span class=\"mono\">/config/map_runs/*.run.json</span>。點地圖上的 <span class=\"mono\">⚙️</span> 可自訂 <span class=\"mono\">每局分鐘</span>（僅儲存在瀏覽器）。",
+
+    "leaderboard.title": "EV 排行榜",
+    "leaderboard.sort": "使用各地圖自己的跑法設定，以 Ist/小時排序。",
+
+    "details.title": "詳細",
+    "details.subtitle": "穩定掉落（>=1%）+ 彩票掉落（<1%）。",
+
+    "phase": "第{k}階段",
+
+    "odds.runs": "約 1 / {n} 局",
+    "odds.hours": "約 1 / {n} 小時",
+
+    "pill.map": "地圖",
+    "pill.phase": "階段",
+    "pill.run": "跑法",
+    "pill.unnamed": "（未命名）",
+    "pill.missingTc": "掉落表缺少 TC：{n}",
+
+    "details.clickRow": "請點選左側排行榜的一列。"
+  },
+
+  "zh-Hans": {
+    "title": "SSD2R 工具 — 地图 EV",
+    "lang.title": "语言",
+    "lang.aria": "选择语言",
+    "lang.zhHant": "繁體",
+    "lang.zhHans": "简体",
+    "lang.en": "EN",
+
+    "h1": "D2R 地图 EV（仅可流通货币）— 单人地狱 p1",
+    "sub": "输入：价格表（阶段）+ TC 掉落表 + 基准地图数据 + 跑法设置。<br/>备注：未建模暗金/绿装。主要用于比较各路线在可流通货币掉落上的效率。",
+
+    "pricePhase": "赛季阶段",
+    "defaultsNote": "默认值来自 <span class=\"mono\">/config/map_runs/*.run.json</span>。点地图上的 <span class=\"mono\">⚙️</span> 可自定义 <span class=\"mono\">每局分钟</span>（仅保存在浏览器）。",
+
+    "leaderboard.title": "EV 排行榜",
+    "leaderboard.sort": "使用各地图自己的跑法设置，以 Ist/小时排序。",
+
+    "details.title": "详情",
+    "details.subtitle": "稳定掉落（>=1%）+ 彩票掉落（<1%）。",
+
+    "phase": "第{k}阶段",
+
+    "odds.runs": "约 1 / {n} 局",
+    "odds.hours": "约 1 / {n} 小时",
+
+    "pill.map": "地图",
+    "pill.phase": "阶段",
+    "pill.run": "跑法",
+    "pill.unnamed": "（未命名）",
+    "pill.missingTc": "掉落表缺少 TC：{n}",
+
+    "details.clickRow": "请点击左侧排行榜的一行。"
+  }
+}

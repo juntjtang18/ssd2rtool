@@ -32,24 +32,42 @@
     .btn{ padding:10px 12px; border-radius:12px; border:0; cursor:pointer; font-weight:900; background:var(--accent); color:#05101f; width:100%; margin-top:10px; }
     .small{ font-size:11px; color:var(--muted); }
     .right{ text-align:right; }
+
+    .topbar{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .langbox{ display:flex; align-items:center; gap:8px; margin-top: 2px; }
+    .langbox .globe{ font-size: 16px; opacity:.9; }
+    .langbox select{ width: 140px; padding: 9px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background:rgba(0,0,0,0.22); color:var(--text); font-size: 14px; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>D2R Map EV (currency-only) — Solo Hell p1</h1>
-    <div class="sub">
-      Inputs: price table (phase) + TC drop table + baseline map (from data) + run config.<br/>
-      Notes: Uniques/sets not modeled. This is meant for comparing routes using tradable currency-like drops.
+    <div class="topbar">
+      <div>
+        <h1 data-i18n="h1">D2R Map EV (currency-only) — Solo Hell p1</h1>
+        <div class="sub" data-i18n-html="sub">
+          Inputs: price table (phase) + TC drop table + baseline map (from data) + run config.<br/>
+          Notes: Uniques/sets not modeled. This is meant for comparing routes using tradable currency-like drops.
+        </div>
+      </div>
+
+      <div class="langbox" data-i18n-title="lang.title">
+        <span class="globe">🌐</span>
+        <select id="langSel" data-i18n-aria-label="lang.aria">
+          <option value="zh-Hant" data-i18n="lang.zhHant">繁體</option>
+          <option value="zh-Hans" data-i18n="lang.zhHans">简体</option>
+          <option value="en" data-i18n="lang.en">EN</option>
+        </select>
+      </div>
     </div>
 
     <div class="card" style="margin-top:14px;">
       <div class="row" style="grid-template-columns: 1fr 2fr; align-items:end;">
         <div>
-          <label>Price phase</label>
+          <label data-i18n="pricePhase">Price phase</label>
           <select id="phaseSel"></select>
           <div class="small">/config/rune-price-table.json</div>
         </div>
-        <div class="small" style="padding-bottom:10px;">
+        <div class="small" style="padding-bottom:10px;" data-i18n-html="defaultsNote">
           Defaults come from <span class="mono">/config/map_runs/*.run.json</span>.
           Click <span class="mono">⚙️</span> on a map to customize <span class="mono">minutes/run</span> (saved in your browser).
         </div>
@@ -60,15 +78,15 @@
 
     <div class="row" style="margin-top:16px;">
       <div class="card">
-        <h2>EV leaderboard</h2>
-        <div class="small">Sorted by Ist/hour using each map’s own run settings.</div>
+        <h2 data-i18n="leaderboard.title">EV leaderboard</h2>
+        <div class="small" data-i18n="leaderboard.sort">Sorted by Ist/hour using each map’s own run settings.</div>
         <div style="overflow:auto; margin-top:10px;">
           <table id="tbl"></table>
         </div>
       </div>
       <div class="card">
-        <h2>Details</h2>
-        <div class="small">Predictable drops (>=1%) + lottery drops (&lt;1%).</div>
+        <h2 data-i18n="details.title">Details</h2>
+        <div class="small" data-i18n="details.subtitle">Predictable drops (>=1%) + lottery drops (&lt;1%).</div>
         <div id="detail" style="margin-top:10px;"></div>
       </div>
     </div>
@@ -84,15 +102,38 @@
       computePerHour
     } from "../model/mapEvCore.js";
 
+    import { detectLang, loadI18nJson, makeT, applyI18nToDom } from "../model/i18n.js";
+
     const el = (id) => document.getElementById(id);
     const fmt = (x, d=2) => (x == null || Number.isNaN(Number(x))) ? "-" : Number(x).toFixed(d);
+
+    // i18n
+    let dict = null;
+    let t = (key, vars=null) => key;
+
+    function applyLang(lang, { rerender = true } = {}) {
+      localStorage.setItem("lang", lang);
+      t = makeT(dict, lang);
+      document.documentElement.lang = lang;
+      document.title = t("title");
+      applyI18nToDom(t);
+      el("langSel").value = lang;
+      if (rerender) render();
+    }
+
+    async function initI18n() {
+      dict = await loadI18nJson("../i18n/map-ev.json");
+      const lang = detectLang();
+      applyLang(lang, { rerender: false });
+      el("langSel").addEventListener("change", () => applyLang(el("langSel").value));
+    }
 
     const nfInt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
     const oddsRuns = (p) => {
       const x = Number(p ?? 0);
       if (!(x > 0)) return "-";
       const n = Math.max(1, Math.round(1 / x));
-      return `~1 / ${nfInt.format(n)} runs`;
+      return t("odds.runs", { n: nfInt.format(n) });
     };
 
     // For leaderboard comparisons: convert a probability into an intuitive per-hour odds.
@@ -100,8 +141,8 @@
       const x = Number(p ?? 0);
       if (!(x > 0)) return "-";
       const hrs = 1 / x;
-      if (hrs < 100) return `~1 / ${hrs.toFixed(1)} hrs`;
-      return `~1 / ${nfInt.format(Math.round(hrs))} hrs`;
+      if (hrs < 100) return t("odds.hours", { n: hrs.toFixed(1) });
+      return t("odds.hours", { n: nfInt.format(Math.round(hrs)) });
     };
 
     let idx = null;
@@ -123,7 +164,7 @@
       const { phases, defaultPhase } = getPhaseOptions(priceTable);
       const keys = Object.keys(phases).sort((a,b)=>Number(a)-Number(b));
       phaseKey = defaultPhase;
-      el("phaseSel").innerHTML = keys.map(k => `<option value="${k}">Phase ${k}</option>`).join("");
+      el("phaseSel").innerHTML = keys.map(k => `<option value="${k}">${t("phase", { k })}</option>`).join("");
       el("phaseSel").value = phaseKey;
       el("phaseSel").addEventListener("change", () => { phaseKey = el("phaseSel").value; render(); });
     }
@@ -211,19 +252,19 @@
       const r = getEffectiveRunCfg(mapId);
       const miss = (m.tcMissingInTcDropTable ?? []).length;
       const extra = [];
-      if (miss) extra.push(`missing TC in drop table: ${miss}`);
+      if (miss) extra.push(t("pill.missingTc", { n: miss }));
 
       el("metaPills").innerHTML = [
-        `<span class="pill">map <strong>${m.mapId}</strong></span>`,
-        `<span class="pill">phase <strong>${phaseKey}</strong></span>`,
-        `<span class="pill">run <strong>${r.label ?? "(unnamed)"}</strong></span>`,
+        `<span class="pill">${t("pill.map")} <strong>${m.mapId}</strong></span>`,
+        `<span class="pill">${t("pill.phase")} <strong>${phaseKey}</strong></span>`,
+        `<span class="pill">${t("pill.run")} <strong>${r.label ?? t("pill.unnamed")}</strong></span>`,
         extra.length ? `<span class="pill" style="color:var(--warn)">${extra.join(" · ")}</span>` : ""
       ].join("");
     }
 
     function renderDetail(row) {
       if (!row) {
-        el("detail").innerHTML = `<div class="small">Click a row in the leaderboard.</div>`;
+        el("detail").innerHTML = `<div class="small">${t("details.clickRow")}</div>`;
         return;
       }
 
@@ -452,6 +493,8 @@
           bundles.set(m.mapId, b);
         });
         await Promise.all(loads);
+
+        await initI18n();
 
         // phase selector uses the first bundle's price table
         const first = bundles.get(idx.maps[0].mapId);
