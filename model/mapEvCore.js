@@ -184,19 +184,20 @@ export function computeMapEvModel({
   const tcTable = tcDropTable?.tc ?? tcDropTable ?? {};
   const tcKeyIdx = getCaseIndex(tcTable);
 
-  // Predictable
-  let predictableIst = 0;
-  const predictableByItemIst = {};
-  const expectedDrops = {}; // expected count per run (for predictable items only)
+  // IMPORTANT:
+  // The predictable/lottery split must be mutually exclusive per ITEM.
+  // Otherwise the same item can appear in both buckets when it is common
+  // in one TC and rare in another (e.g., FG in a boss TC vs FG from trash).
+  //
+  // Rule:
+  //   maxProb(item) = max over all TCs in this run of P(item | that TC)
+  //   Predictable if maxProb(item) >= predictableMinProb, else Lottery.
 
-  // Lottery value (priced items with prob < 1%)
-  let lotteryIst = 0;
-  const lotteryByItemIst = {};
-  const lotteryExpectedDrops = {}; // expected count per run (for lottery-priced items only)
+  const itemIstAll = {}; // IST/run contribution (priced items only)
+  const itemExpectedAll = {}; // expected count/run (priced items only)
+  const itemMaxProbAll = {}; // max per-mob probability across included TCs
 
-  // Lottery (Vex+)
   const vexPlusExpected = {}; // expected count (lambda) per rune per run
-
   const missingTc = [];
 
   for (const [tcRaw, Nt] of Object.entries(runTcCounts ?? {})) {
@@ -219,34 +220,45 @@ export function computeMapEvModel({
 
       // Price lookup is case-insensitive; canonical casing comes from the price table.
       const { key: itemCanon, value: v } = lookupPrice(itemInput, phaseData);
-
-      // Predictable bucket: only per-mob prob >= 1%
-      if (prob >= predictableMinProb) {
-        if (!(v > 0)) continue;
-
-        const c = n * prob * v;
-        predictableIst += c;
-        predictableByItemIst[itemCanon] = (predictableByItemIst[itemCanon] ?? 0) + c;
-        expectedDrops[itemCanon] = (expectedDrops[itemCanon] ?? 0) + n * prob;
+      if (!(v > 0)) {
+        // Not priced => ignore for predictable/lottery value buckets.
+        // (Still fine to skip here.)
         continue;
       }
 
-      // Lottery value bucket: priced items with per-mob prob < 1%
-      // (This is EV, not "odds".)
-      if (prob < predictableMinProb) {
-        if (v > 0) {
-          const c = n * prob * v;
-          lotteryIst += c;
-          lotteryByItemIst[itemCanon] = (lotteryByItemIst[itemCanon] ?? 0) + c;
-          lotteryExpectedDrops[itemCanon] = (lotteryExpectedDrops[itemCanon] ?? 0) + n * prob;
-        }
-      }
+      itemIstAll[itemCanon] = (itemIstAll[itemCanon] ?? 0) + n * prob * v;
+      itemExpectedAll[itemCanon] = (itemExpectedAll[itemCanon] ?? 0) + n * prob;
+      itemMaxProbAll[itemCanon] = Math.max(itemMaxProbAll[itemCanon] ?? 0, prob);
 
-      // Vex+ odds bucket: case-insensitive check
+      // Vex+ odds: include all contributions (doesn't matter for runes since they're always <1%).
       const itemUpper = String(itemCanon || itemInput).toUpperCase();
-      if (VEX_PLUS_SET.has(itemUpper) && prob < predictableMinProb) {
+      if (VEX_PLUS_SET.has(itemUpper)) {
         vexPlusExpected[itemUpper] = (vexPlusExpected[itemUpper] ?? 0) + n * prob;
       }
+    }
+  }
+
+  // Split by itemMaxProbAll
+  let predictableIst = 0;
+  const predictableByItemIst = {};
+  const predictableExpectedDrops = {};
+
+  let lotteryIst = 0;
+  const lotteryByItemIst = {};
+  const lotteryExpectedDrops = {};
+
+  for (const [itemCanon, ist] of Object.entries(itemIstAll)) {
+    const maxProb = Number(itemMaxProbAll[itemCanon] ?? 0);
+    const exp = Number(itemExpectedAll[itemCanon] ?? 0);
+
+    if (maxProb >= predictableMinProb) {
+      predictableIst += ist;
+      predictableByItemIst[itemCanon] = ist;
+      predictableExpectedDrops[itemCanon] = exp;
+    } else {
+      lotteryIst += ist;
+      lotteryByItemIst[itemCanon] = ist;
+      lotteryExpectedDrops[itemCanon] = exp;
     }
   }
 
@@ -264,7 +276,7 @@ export function computeMapEvModel({
     predictable: {
       istPerRun: predictableIst,
       byItemIst: predictableByItemIst,
-      expectedDrops,
+      expectedDrops: predictableExpectedDrops,
     },
     lottery: {
       // EV for all priced items with per-mob prob < predictableMinProb
