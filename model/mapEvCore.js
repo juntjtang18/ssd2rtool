@@ -205,6 +205,44 @@ export function computeMapEvModel({
   };
 }
 
+// Real EV (IST/run): include ALL priced items (no min-prob threshold).
+// Any item missing from the price table contributes 0.
+export function computeMapEvRealValue({ runTcCounts, tcDropTable, phaseData }) {
+  const tcTable = tcDropTable?.tc ?? tcDropTable ?? {};
+
+  let istPerRun = 0;
+  const byItemIst = {};
+  const expectedDrops = {}; // expected count per run (priced items only)
+  const missingTc = [];
+
+  for (const [tc, Nt] of Object.entries(runTcCounts ?? {})) {
+    const n = Number(Nt ?? 0);
+    if (!(n > 0)) continue;
+
+    const drops = tcTable[tc];
+    if (!drops) {
+      missingTc.push(tc);
+      continue;
+    }
+
+    for (const [itemRaw, pRaw] of Object.entries(drops)) {
+      const prob = Number(pRaw ?? 0);
+      if (!(prob > 0)) continue;
+
+      const item = String(itemRaw ?? "").trim().toUpperCase();
+      const v = priceInIst(item, phaseData);
+      if (!(v > 0)) continue; // unpriced => 0
+
+      const cIst = n * prob * v;
+      istPerRun += cIst;
+      byItemIst[item] = (byItemIst[item] ?? 0) + cIst;
+      expectedDrops[item] = (expectedDrops[item] ?? 0) + n * prob;
+    }
+  }
+
+  return { istPerRun, byItemIst, expectedDrops, missingTc };
+}
+
 // Back-compat: old name returns the predictable (>=1%) IST/run only.
 export function computeMapEvIst({ runTcCounts, tcDropTable, phaseData }) {
   const m = computeMapEvModel({ runTcCounts, tcDropTable, phaseData });
