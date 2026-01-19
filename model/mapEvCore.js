@@ -50,7 +50,13 @@ export async function loadMapEvBundle(entry, indexMeta) {
     fetchJson(ptUrl.href),
   ]);
 
-  return { map, run, tcDrop, priceTable, urls: { map: mapUrl.href, run: runUrl.href, tc: tcUrl.href, pt: ptUrl.href } };
+  return {
+    map,
+    run,
+    tcDrop,
+    priceTable,
+    urls: { map: mapUrl.href, run: runUrl.href, tc: tcUrl.href, pt: ptUrl.href },
+  };
 }
 
 export function getPhaseOptions(priceTable) {
@@ -60,15 +66,53 @@ export function getPhaseOptions(priceTable) {
   return { phases, defaultPhase };
 }
 
+// ------------------------------
+// Case-insensitive key handling
+// ------------------------------
+// We treat ALL lookups (TC names, item names, price keys) as case-insensitive.
+// Internally we still keep a canonical key for display/aggregation:
+//  - For priced items: canonical key comes from the price table key casing.
+//  - For TCs: canonical key comes from the tc-drop-table key casing.
+
+const _caseIndexCache = new WeakMap();
+
+function getCaseIndex(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  let idx = _caseIndexCache.get(obj);
+  if (idx) return idx;
+  idx = new Map();
+  for (const k of Object.keys(obj)) {
+    idx.set(String(k).toLowerCase(), k);
+  }
+  _caseIndexCache.set(obj, idx);
+  return idx;
+}
+
+function canonicalKey(rawKey, obj) {
+  const k = String(rawKey ?? "").trim();
+  if (!k) return "";
+  const idx = getCaseIndex(obj);
+  return idx?.get(k.toLowerCase()) ?? k;
+}
+
 // Price-table convention: { O: items, N: ist } => 1 item = N/O Ist
-export function priceInIst(itemKey, phaseData) {
-  const key = String(itemKey ?? "").trim().toUpperCase();
+function lookupPrice(itemKey, phaseData) {
+  const raw = String(itemKey ?? "").trim();
+  if (!raw) return { key: "", value: 0 };
+
+  const key = canonicalKey(raw, phaseData);
   const entry = phaseData?.[key];
-  if (!entry) return 0;
+  if (!entry) return { key, value: 0 };
+
   const O = Number(entry.O ?? 0);
   const N = Number(entry.N ?? 0);
-  if (!(O > 0) || !(N > 0)) return 0;
-  return N / O;
+  if (!(O > 0) || !(N > 0)) return { key, value: 0 };
+
+  return { key, value: N / O };
+}
+
+export function priceInIst(itemKey, phaseData) {
+  return lookupPrice(itemKey, phaseData).value;
 }
 
 export function deriveRunTcCounts(mapTcCounts, runCfg) {
@@ -138,13 +182,14 @@ export function computeMapEvModel({
   predictableMinProb = 0.01,
 }) {
   const tcTable = tcDropTable?.tc ?? tcDropTable ?? {};
+  const tcKeyIdx = getCaseIndex(tcTable);
 
   // Predictable
   let predictableIst = 0;
   const predictableByItemIst = {};
   const expectedDrops = {}; // expected count per run (for predictable items only)
 
-  // Lottery (priced items with prob < 1%)
+  // Lottery value (priced items with prob < 1%)
   let lotteryIst = 0;
   const lotteryByItemIst = {};
   const lotteryExpectedDrops = {}; // expected count per run (for lottery-priced items only)
@@ -154,13 +199,14 @@ export function computeMapEvModel({
 
   const missingTc = [];
 
-  for (const [tc, Nt] of Object.entries(runTcCounts ?? {})) {
+  for (const [tcRaw, Nt] of Object.entries(runTcCounts ?? {})) {
     const n = Number(Nt ?? 0);
     if (!(n > 0)) continue;
 
-    const drops = tcTable[tc];
+    const tcCanon = tcKeyIdx?.get(String(tcRaw).toLowerCase()) ?? tcRaw;
+    const drops = tcTable[tcCanon];
     if (!drops) {
-      missingTc.push(tc);
+      missingTc.push(tcRaw);
       continue;
     }
 
@@ -168,35 +214,38 @@ export function computeMapEvModel({
       const prob = Number(pRaw ?? 0);
       if (!(prob > 0)) continue;
 
-      const item = String(itemRaw ?? "").trim().toUpperCase();
+      const itemInput = String(itemRaw ?? "").trim();
+      if (!itemInput) continue;
+
+      // Price lookup is case-insensitive; canonical casing comes from the price table.
+      const { key: itemCanon, value: v } = lookupPrice(itemInput, phaseData);
 
       // Predictable bucket: only per-mob prob >= 1%
       if (prob >= predictableMinProb) {
-        const v = priceInIst(item, phaseData);
         if (!(v > 0)) continue;
 
         const c = n * prob * v;
         predictableIst += c;
-        predictableByItemIst[item] = (predictableByItemIst[item] ?? 0) + c;
-        expectedDrops[item] = (expectedDrops[item] ?? 0) + n * prob;
+        predictableByItemIst[itemCanon] = (predictableByItemIst[itemCanon] ?? 0) + c;
+        expectedDrops[itemCanon] = (expectedDrops[itemCanon] ?? 0) + n * prob;
         continue;
       }
 
       // Lottery value bucket: priced items with per-mob prob < 1%
       // (This is EV, not "odds".)
       if (prob < predictableMinProb) {
-        const v = priceInIst(item, phaseData);
         if (v > 0) {
           const c = n * prob * v;
           lotteryIst += c;
-          lotteryByItemIst[item] = (lotteryByItemIst[item] ?? 0) + c;
-          lotteryExpectedDrops[item] = (lotteryExpectedDrops[item] ?? 0) + n * prob;
+          lotteryByItemIst[itemCanon] = (lotteryByItemIst[itemCanon] ?? 0) + c;
+          lotteryExpectedDrops[itemCanon] = (lotteryExpectedDrops[itemCanon] ?? 0) + n * prob;
         }
       }
 
-      // Lottery bucket: only Vex+ runes, per-mob prob < 1%
-      if (VEX_PLUS_SET.has(item) && prob < predictableMinProb) {
-        vexPlusExpected[item] = (vexPlusExpected[item] ?? 0) + n * prob;
+      // Vex+ odds bucket: case-insensitive check
+      const itemUpper = String(itemCanon || itemInput).toUpperCase();
+      if (VEX_PLUS_SET.has(itemUpper) && prob < predictableMinProb) {
+        vexPlusExpected[itemUpper] = (vexPlusExpected[itemUpper] ?? 0) + n * prob;
       }
     }
   }
@@ -235,7 +284,11 @@ export function computeMapEvModel({
 // Back-compat: old name returns the predictable (>=1%) IST/run only.
 export function computeMapEvIst({ runTcCounts, tcDropTable, phaseData }) {
   const m = computeMapEvModel({ runTcCounts, tcDropTable, phaseData });
-  return { totalIstPerRun: m.predictable.istPerRun, byItemIst: m.predictable.byItemIst, missingTc: m.missingTc };
+  return {
+    totalIstPerRun: m.predictable.istPerRun,
+    byItemIst: m.predictable.byItemIst,
+    missingTc: m.missingTc,
+  };
 }
 
 export function computePerHour(totalIstPerRun, minutesPerRun) {
