@@ -1,12 +1,16 @@
 // /model/mapEvCore.js
 // Map EV model (currency-only) with a split:
-//   PredictableValue: only drops with per-mob probability >= 1%
-//   LotteryValue: probability of getting at least one Vex+ rune (Poisson approx)
+//   PredictableValue: priced items with per-mob probability >= 1%
+//   LotteryValue: priced items with per-mob probability < 1%
+//   Vex+ odds: probability of getting at least one Vex+ rune (Poisson approx)
 //
 // PredictableValue (IST/run):
 //   sum_tc( Nt * sum_item( V_item * P_tc_item ) ) for P_tc_item >= 0.01
 //
-// LotteryValue (prob/run):
+// LotteryValue (IST/run):
+//   sum_tc( Nt * sum_item( V_item * P_tc_item ) ) for 0 < P_tc_item < 0.01
+//
+// Vex+ odds (prob/run):
 //   Let lambda = sum_over_VexPlus( expected_count_per_run(rune) )
 //   Then P(at least one Vex+ rune) ~= 1 - exp(-lambda)
 //   Per-rune: P(at least one of rune R) ~= 1 - exp(-lambda_R)
@@ -46,7 +50,13 @@ export async function loadMapEvBundle(entry, indexMeta) {
     fetchJson(ptUrl.href),
   ]);
 
-  return { map, run, tcDrop, priceTable, urls: { map: mapUrl.href, run: runUrl.href, tc: tcUrl.href, pt: ptUrl.href } };
+  return {
+    map,
+    run,
+    tcDrop,
+    priceTable,
+    urls: { map: mapUrl.href, run: runUrl.href, tc: tcUrl.href, pt: ptUrl.href },
+  };
 }
 
 export function getPhaseOptions(priceTable) {
@@ -56,15 +66,53 @@ export function getPhaseOptions(priceTable) {
   return { phases, defaultPhase };
 }
 
+// ------------------------------
+// Case-insensitive key handling
+// ------------------------------
+// We treat ALL lookups (TC names, item names, price keys) as case-insensitive.
+// Internally we still keep a canonical key for display/aggregation:
+//  - For priced items: canonical key comes from the price table key casing.
+//  - For TCs: canonical key comes from the tc-drop-table key casing.
+
+const _caseIndexCache = new WeakMap();
+
+function getCaseIndex(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  let idx = _caseIndexCache.get(obj);
+  if (idx) return idx;
+  idx = new Map();
+  for (const k of Object.keys(obj)) {
+    idx.set(String(k).toLowerCase(), k);
+  }
+  _caseIndexCache.set(obj, idx);
+  return idx;
+}
+
+function canonicalKey(rawKey, obj) {
+  const k = String(rawKey ?? "").trim();
+  if (!k) return "";
+  const idx = getCaseIndex(obj);
+  return idx?.get(k.toLowerCase()) ?? k;
+}
+
 // Price-table convention: { O: items, N: ist } => 1 item = N/O Ist
-export function priceInIst(itemKey, phaseData) {
-  const key = String(itemKey ?? "").trim().toUpperCase();
+function lookupPrice(itemKey, phaseData) {
+  const raw = String(itemKey ?? "").trim();
+  if (!raw) return { key: "", value: 0 };
+
+  const key = canonicalKey(raw, phaseData);
   const entry = phaseData?.[key];
-  if (!entry) return 0;
+  if (!entry) return { key, value: 0 };
+
   const O = Number(entry.O ?? 0);
   const N = Number(entry.N ?? 0);
-  if (!(O > 0) || !(N > 0)) return 0;
-  return N / O;
+  if (!(O > 0) || !(N > 0)) return { key, value: 0 };
+
+  return { key, value: N / O };
+}
+
+export function priceInIst(itemKey, phaseData) {
+  return lookupPrice(itemKey, phaseData).value;
 }
 
 export function deriveRunTcCounts(mapTcCounts, runCfg) {
@@ -134,24 +182,35 @@ export function computeMapEvModel({
   predictableMinProb = 0.01,
 }) {
   const tcTable = tcDropTable?.tc ?? tcDropTable ?? {};
+  const tcKeyIdx = getCaseIndex(tcTable);
 
-  // Predictable
-  let predictableIst = 0;
-  const predictableByItemIst = {};
-  const expectedDrops = {}; // expected count per run (for predictable items only)
+  // IMPORTANT:
+  // We bucket Predictable vs Lottery as MUTUALLY EXCLUSIVE PER ITEM.
+  // Otherwise the same item can appear in both sections when it is >=1% in one TC
+  // but <1% in another TC.
+  // Rule:
+  //   maxProb(item) = max over all TCs in this run of P(item | TC)
+  //   if maxProb(item) >= predictableMinProb => Predictable
+  //   else => Lottery
 
-  // Lottery (Vex+)
+  // First pass: aggregate EV + expected drops for ALL priced items, and track max per-mob prob per item.
+  const itemIstAll = {}; // IST/run contribution (priced only)
+  const itemExpectedDropsAll = {}; // expected count per run (all, priced only)
+  const itemMaxProbAll = {}; // max P(item|TC) over all TCs in run
+
+  // Vex+ odds (independent of bucket)
   const vexPlusExpected = {}; // expected count (lambda) per rune per run
 
   const missingTc = [];
 
-  for (const [tc, Nt] of Object.entries(runTcCounts ?? {})) {
+  for (const [tcRaw, Nt] of Object.entries(runTcCounts ?? {})) {
     const n = Number(Nt ?? 0);
     if (!(n > 0)) continue;
 
-    const drops = tcTable[tc];
+    const tcCanon = tcKeyIdx?.get(String(tcRaw).toLowerCase()) ?? tcRaw;
+    const drops = tcTable[tcCanon];
     if (!drops) {
-      missingTc.push(tc);
+      missingTc.push(tcRaw);
       continue;
     }
 
@@ -159,24 +218,52 @@ export function computeMapEvModel({
       const prob = Number(pRaw ?? 0);
       if (!(prob > 0)) continue;
 
-      const item = String(itemRaw ?? "").trim().toUpperCase();
+      const itemInput = String(itemRaw ?? "").trim();
+      if (!itemInput) continue;
 
-      // Predictable bucket: only per-mob prob >= 1%
-      if (prob >= predictableMinProb) {
-        const v = priceInIst(item, phaseData);
-        if (!(v > 0)) continue;
-
-        const c = n * prob * v;
-        predictableIst += c;
-        predictableByItemIst[item] = (predictableByItemIst[item] ?? 0) + c;
-        expectedDrops[item] = (expectedDrops[item] ?? 0) + n * prob;
+      // Price lookup is case-insensitive; canonical casing comes from the price table.
+      const { key: itemCanon, value: v } = lookupPrice(itemInput, phaseData);
+      if (!(v > 0)) {
+        // Still allow Vex+ odds even if unpriced (but in practice your Vex+ are priced).
+        const itemUpper0 = String(itemCanon || itemInput).toUpperCase();
+        if (VEX_PLUS_SET.has(itemUpper0)) {
+          vexPlusExpected[itemUpper0] = (vexPlusExpected[itemUpper0] ?? 0) + n * prob;
+        }
         continue;
       }
 
-      // Lottery bucket: only Vex+ runes, per-mob prob < 1%
-      if (VEX_PLUS_SET.has(item) && prob < predictableMinProb) {
-        vexPlusExpected[item] = (vexPlusExpected[item] ?? 0) + n * prob;
+      itemIstAll[itemCanon] = (itemIstAll[itemCanon] ?? 0) + n * prob * v;
+      itemExpectedDropsAll[itemCanon] = (itemExpectedDropsAll[itemCanon] ?? 0) + n * prob;
+      itemMaxProbAll[itemCanon] = Math.max(itemMaxProbAll[itemCanon] ?? 0, prob);
+
+      const itemUpper = String(itemCanon || itemInput).toUpperCase();
+      if (VEX_PLUS_SET.has(itemUpper)) {
+        vexPlusExpected[itemUpper] = (vexPlusExpected[itemUpper] ?? 0) + n * prob;
       }
+    }
+  }
+
+  // Second pass: split items into Predictable vs Lottery by maxProb(item)
+  let predictableIst = 0;
+  const predictableByItemIst = {};
+  const expectedDrops = {}; // expected drops per run (predictable)
+
+  let lotteryIst = 0;
+  const lotteryByItemIst = {};
+  const lotteryExpectedDrops = {}; // expected drops per run (lottery)
+
+  for (const [itemCanon, ist] of Object.entries(itemIstAll)) {
+    const maxProb = Number(itemMaxProbAll[itemCanon] ?? 0);
+    const expDrops = Number(itemExpectedDropsAll[itemCanon] ?? 0);
+
+    if (maxProb >= predictableMinProb) {
+      predictableIst += ist;
+      predictableByItemIst[itemCanon] = ist;
+      expectedDrops[itemCanon] = expDrops;
+    } else {
+      lotteryIst += ist;
+      lotteryByItemIst[itemCanon] = ist;
+      lotteryExpectedDrops[itemCanon] = expDrops;
     }
   }
 
@@ -197,6 +284,12 @@ export function computeMapEvModel({
       expectedDrops,
     },
     lottery: {
+      // EV for all priced items with per-mob prob < predictableMinProb
+      istPerRun: lotteryIst,
+      byItemIst: lotteryByItemIst,
+      expectedDrops: lotteryExpectedDrops,
+
+      // Vex+ odds (kept for "lottery realization" reference)
       vexPlusProb,
       vexPlusExpected,
       vexPlusProbByRune,
@@ -208,7 +301,11 @@ export function computeMapEvModel({
 // Back-compat: old name returns the predictable (>=1%) IST/run only.
 export function computeMapEvIst({ runTcCounts, tcDropTable, phaseData }) {
   const m = computeMapEvModel({ runTcCounts, tcDropTable, phaseData });
-  return { totalIstPerRun: m.predictable.istPerRun, byItemIst: m.predictable.byItemIst, missingTc: m.missingTc };
+  return {
+    totalIstPerRun: m.predictable.istPerRun,
+    byItemIst: m.predictable.byItemIst,
+    missingTc: m.missingTc,
+  };
 }
 
 export function computePerHour(totalIstPerRun, minutesPerRun) {

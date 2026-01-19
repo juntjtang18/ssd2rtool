@@ -79,7 +79,7 @@
     <div class="row" style="margin-top:16px;">
       <div class="card">
         <h2 data-i18n="leaderboard.title">EV leaderboard</h2>
-        <div class="small" data-i18n="leaderboard.sort">Sorted by Ist/hour using each map’s own run settings.</div>
+        <div class="small" data-i18n="leaderboard.sort">Sorted by total IST/hour (Predictable + Lottery) using each map’s own run settings.</div>
         <div style="overflow:auto; margin-top:10px;">
           <table id="tbl"></table>
         </div>
@@ -136,13 +136,14 @@
       return t("odds.runs", { n: nfInt.format(n) });
     };
 
-    // For leaderboard comparisons: convert a probability into an intuitive per-hour odds.
-    const oddsHours = (p) => {
+    // For leaderboard comparisons: show the hours until one hit (approx), derived from the per-hour probability.
+    // Display should be just "29 hrs" (no "~1 / ...").
+    const hitHours = (p) => {
       const x = Number(p ?? 0);
       if (!(x > 0)) return "-";
       const hrs = 1 / x;
-      if (hrs < 100) return t("odds.hours", { n: hrs.toFixed(1) });
-      return t("odds.hours", { n: nfInt.format(Math.round(hrs)) });
+      if (hrs < 100) return t("odds.hoursOnly", { n: hrs.toFixed(1) });
+      return t("odds.hoursOnly", { n: nfInt.format(Math.round(hrs)) });
     };
 
     let idx = null;
@@ -272,7 +273,7 @@
       const minutesPerRun = Number(runCfg?.time?.minutesPerRun ?? row.minutesPerRun ?? 0);
       const isEditing = editOpenFor === row.mapId;
 
-      // Predictable drops: show expected count/run + IST/run contribution
+      // Predictable drops: show expected count/run + IST/hour contribution
       const predictable = Object.keys(row.expectedDrops ?? {})
         .map((k) => {
           const item = String(k);
@@ -283,7 +284,18 @@
         .filter((x) => x.cnt > 0 && x.ist > 0)
         .sort((a, b) => b.ist - a.ist);
 
-      // Lottery drops: Vex+ (per-rune probability; Poisson approx)
+      // Lottery value: priced items with per-mob prob < 1%
+      const lotteryValue = Object.keys(row.lotteryExpectedDrops ?? {})
+        .map((k) => {
+          const item = String(k);
+          const cnt = Number(row.lotteryExpectedDrops?.[k] ?? 0);
+          const ist = Number(row.lotteryByItemIst?.[k] ?? 0);
+          return { item, cnt, ist };
+        })
+        .filter((x) => x.cnt > 0 && x.ist > 0)
+        .sort((a, b) => b.ist - a.ist);
+
+      // Vex+ lottery: per-rune probability (Poisson approx)
       // Robustness: if the page is running with an older cached JS module that
       // didn't populate vexPlusProbByRune, fall back to deriving per-rune probs
       // from vexPlusExpected (lambda) via p = 1 - exp(-lambda).
@@ -336,23 +348,39 @@
 
         <div style="margin-top:14px;" class="small"><strong>Predictable Drops</strong> (>=1% per-mob; priced items only)</div>
         <table style="margin-top:6px; width:100%; border-collapse:collapse;">
-          <tr><th>Item</th><th class="right">Expected/run</th><th class="right">IST/run</th></tr>
+          <tr><th>Item</th><th class="right">Expected/run</th><th class="right">IST/hour</th></tr>
           ${predictable.length
             ? predictable.map((x) => `
                 <tr>
                   <td class="mono">${x.item}</td>
                   <td class="mono right">${fmt(x.cnt,6)}</td>
-                  <td class="mono right">${fmt(x.ist,6)}</td>
+                  <td class="mono right">${fmt(computePerHour(x.ist, minutesPerRun),6)}</td>
                 </tr>
               `).join("")
             : `<tr><td colspan="3" class="small" style="color:var(--muted)">No predictable priced drops found (>=1% + priced).</td></tr>`
           }
         </table>
 
-        <div style="margin-top:14px;" class="small"><strong>Lottery Drops</strong> (&lt;1% per-mob; Vex+ only)</div>
-        <div class="small" style="margin-top:6px; color:var(--muted)">Combined Vex+ odds: <span class="mono">${showLottery ? oddsRuns(combinedP) : "-"}</span></div>
+        <div style="margin-top:14px;" class="small"><strong>Lottery Value</strong> (&lt;1% per-mob; priced items only)</div>
         <table style="margin-top:6px; width:100%; border-collapse:collapse;">
-          <tr><th>Item</th><th class="right">Odds</th></tr>
+          <tr><th>Item</th><th class="right">Expected/run</th><th class="right">IST/hour</th></tr>
+          ${lotteryValue.length
+            ? lotteryValue.map((x) => `
+                <tr>
+                  <td class="mono">${x.item}</td>
+                  <td class="mono right">${fmt(x.cnt,6)}</td>
+                  <td class="mono right">${fmt(computePerHour(x.ist, minutesPerRun),6)}</td>
+                </tr>
+              `).join("")
+            : `<tr><td colspan="3" class="small" style="color:var(--muted)">No lottery priced items found (&lt;1% + priced).</td></tr>`
+          }
+        </table>
+
+        <div style="margin-top:14px;" class="small"><strong>Vex+ Realization Time</strong> (hrs)</div>
+        <div class="small" style="margin-top:6px; color:var(--muted)">Vex+ time: <span class="mono">${hitHours(row.vexPlusProbHour)}</span></div>
+        <div class="small" style="margin-top:6px; color:var(--muted)">Combined Vex+ odds (per run): <span class="mono">${showLottery ? oddsRuns(combinedP) : "-"}</span></div>
+        <table style="margin-top:6px; width:100%; border-collapse:collapse;">
+          <tr><th>Rune</th><th class="right">Odds</th></tr>
           ${showLottery
             ? lottery.map((x) => `
                 <tr>
@@ -410,8 +438,11 @@
         const phaseData = currentPhaseData(b.priceTable);
         const ev = computeMapEvModel({ runTcCounts, tcDropTable: b.tcDrop, phaseData });
         const minutesPerRun = Number(run.time?.minutesPerRun ?? 0);
-        const istPerRun = ev.predictable.istPerRun;
-        const istPerHour = computePerHour(istPerRun, minutesPerRun);
+        const predictableIstPerRun = ev.predictable.istPerRun;
+        const lotteryIstPerRun = ev.lottery?.istPerRun ?? 0;
+        const predictableIstPerHour = computePerHour(predictableIstPerRun, minutesPerRun);
+        const lotteryIstPerHour = computePerHour(lotteryIstPerRun, minutesPerRun);
+        const totalIstPerHour = predictableIstPerHour + lotteryIstPerHour;
         const vexPlusProb = ev.lottery.vexPlusProb;
         // For comparisons, show probability within one hour (not per-run),
         // using Poisson: p = 1 - exp(-lambda), where lambda_hour = lambda_run * runsPerHour.
@@ -422,39 +453,47 @@
         rows.push({
           mapId: m.mapId,
           name: m.name,
-          istPerRun,
-          istPerHour,
+          predictableIstPerRun,
+          lotteryIstPerRun,
+          predictableIstPerHour,
+          lotteryIstPerHour,
+          totalIstPerHour,
           minutesPerRun,
           byItemIst: ev.predictable.byItemIst,
+          lotteryByItemIst: ev.lottery?.byItemIst ?? {},
           missingTc: ev.missingTc,
           vexPlusProb,
           vexPlusProbHour,
           vexPlusExpected: ev.lottery.vexPlusExpected,
           vexPlusProbByRune: ev.lottery.vexPlusProbByRune,
-          expectedDrops: ev.predictable.expectedDrops
+          expectedDrops: ev.predictable.expectedDrops,
+          lotteryExpectedDrops: ev.lottery?.expectedDrops ?? {}
         });
       }
 
-      rows.sort((a,b)=>b.istPerHour - a.istPerHour);
+      rows.sort((a,b)=>b.totalIstPerHour - a.totalIstPerHour);
 
       const tbl = el("tbl");
       tbl.innerHTML = `
         <tr>
-          <th>Map</th>
-          <th></th>
-          <th class="right">IST/run</th>
-          <th class="right">IST/hour</th>
-          <th class="right">Vex+ odds/hour</th>
-          <th class="right">min/run</th>
+          <th rowspan="2">Map</th>
+          <th colspan="3" class="right">Map Run Revenue</th>
+          <th rowspan="2" class="right">min/run</th>
+          <th rowspan="2"></th>
+        </tr>
+        <tr>
+          <th class="right">Predictable IST/hour</th>
+          <th class="right">Lottery IST/hour</th>
+          <th class="right">Vex+ (hrs)</th>
         </tr>
         ${rows.map(r => `
           <tr data-id="${r.mapId}" style="cursor:pointer">
             <td>${r.name}</td>
-            <td class="right"><button data-gear="${r.mapId}" title="Edit" style="cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:var(--text); border-radius:10px; padding:6px 9px;">⚙️</button></td>
-            <td class="mono right">${fmt(r.istPerRun,6)}</td>
-            <td class="mono right">${fmt(r.istPerHour,4)}</td>
-            <td class="mono right">${oddsHours(r.vexPlusProbHour)}</td>
+            <td class="mono right">${fmt(r.predictableIstPerHour,4)}</td>
+            <td class="mono right">${fmt(r.lotteryIstPerHour,4)}</td>
+            <td class="mono right">${hitHours(r.vexPlusProbHour)}</td>
             <td class="mono right">${fmt(r.minutesPerRun,2)}</td>
+            <td class="right"><button data-gear="${r.mapId}" title="Edit" style="cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:var(--text); border-radius:10px; padding:6px 9px;">⚙️</button></td>
           </tr>
         `).join("")}
       `;
