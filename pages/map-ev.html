@@ -489,11 +489,11 @@
         ${rows.map(r => `
           <tr data-id="${r.mapId}" style="cursor:pointer">
             <td>${r.name}</td>
-            <td class="right"><button data-gear="${r.mapId}" title="Edit" style="cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:var(--text); border-radius:10px; padding:6px 9px;">⚙️</button></td>
             <td class="mono right">${fmt(r.predictableIstPerHour,4)}</td>
             <td class="mono right">${fmt(r.lotteryIstPerHour,4)}</td>
             <td class="mono right">${hitHours(r.vexPlusProbHour)}</td>
             <td class="mono right">${fmt(r.minutesPerRun,2)}</td>
+            <td class="right"><button data-gear="${r.mapId}" title="Edit" style="cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:var(--text); border-radius:10px; padding:6px 9px;">⚙️</button></td>
           </tr>
         `).join("")}
       `;
