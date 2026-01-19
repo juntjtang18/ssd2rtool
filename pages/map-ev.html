@@ -329,18 +329,6 @@
       // (Avoid confusing situations like "combined odds shows" but list is empty.)
       const showLottery = lottery.length > 0;
 
-      // Lottery value breakdown (<1% per-mob; priced items)
-      const lotteryValue = Object.keys(row.lotExpectedDrops ?? {})
-        .map((k) => {
-          const item = String(k);
-          const expected = Number(row.lotExpectedDrops?.[k] ?? 0);
-          const istPerRun = Number(row.lotByItemIst?.[k] ?? 0);
-          const istPerHour = minutesPerRun > 0 ? (istPerRun * (60 / minutesPerRun)) : 0;
-          return { item, expected, istPerRun, istPerHour };
-        })
-        .filter((x) => x.expected > 0 && x.istPerRun > 0)
-        .sort((a, b) => b.istPerHour - a.istPerHour);
-
       el("detail").innerHTML = `
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
           <div style="font-weight:900;">${row.name}</div>
