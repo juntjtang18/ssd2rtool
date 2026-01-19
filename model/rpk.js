@@ -12,7 +12,7 @@ export const BOSSES = [
   { id: "summoner", label: "Summoner" },
   { id: "nihl", label: "Nihlathak" },
   { id: "council", label: "Council (1)" },
-  { id: "council5", label: "Council (5)" },
+  { id: "council11", label: "Council (11)" },
   { id: "andariel", label: "Andariel" },
   { id: "mephisto", label: "Mephisto" },
   { id: "diablo", label: "Diablo" },
