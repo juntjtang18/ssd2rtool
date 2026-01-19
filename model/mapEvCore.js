@@ -1,21 +1,15 @@
 // /model/mapEvCore.js
 // Map EV model (currency-only) with a split:
-//
-//   Map Run Value = PredictableValue + LotteryValue
+//   PredictableValue: only drops with per-mob probability >= 1%
+//   LotteryValue: probability of getting at least one Vex+ rune (Poisson approx)
 //
 // PredictableValue (IST/run):
 //   sum_tc( Nt * sum_item( V_item * P_tc_item ) ) for P_tc_item >= 0.01
 //
-// LotteryValue (IST/run):
-//   sum_tc( Nt * sum_item( V_item * P_tc_item ) ) for P_tc_item < 0.01
-//
-// Value Realize Time (for LotteryValue):
-//   Find the "median" lottery item by contribution (IST/run) across all lottery items,
-//   then estimate time-to-drop-one:
-//     runs_to_one ~= 1 / expected_count_per_run(medianItem)
-//     hours_to_one = runs_to_one * minutesPerRun / 60
-//
-// Separately (unchanged): "Vex+ odds" is still shown using Poisson approximation.
+// LotteryValue (prob/run):
+//   Let lambda = sum_over_VexPlus( expected_count_per_run(rune) )
+//   Then P(at least one Vex+ rune) ~= 1 - exp(-lambda)
+//   Per-rune: P(at least one of rune R) ~= 1 - exp(-lambda_R)
 //
 // Inputs:
 //  - /config/rune-price-table.json (phase-based pricing; V_item in Ist)
@@ -141,17 +135,12 @@ export function computeMapEvModel({
 }) {
   const tcTable = tcDropTable?.tc ?? tcDropTable ?? {};
 
-  // Predictable (>=1% per-mob)
+  // Predictable
   let predictableIst = 0;
   const predictableByItemIst = {};
-  const predictableExpectedDrops = {}; // expected count per run (predictable items)
+  const expectedDrops = {}; // expected count per run (for predictable items only)
 
-  // Lottery (<1% per-mob; priced items)
-  let lotteryIst = 0;
-  const lotteryByItemIst = {};
-  const lotteryExpectedDrops = {}; // expected count per run (lottery items)
-
-  // Vex+ odds (unchanged)
+  // Lottery (Vex+)
   const vexPlusExpected = {}; // expected count (lambda) per rune per run
 
   const missingTc = [];
@@ -172,25 +161,21 @@ export function computeMapEvModel({
 
       const item = String(itemRaw ?? "").trim().toUpperCase();
 
-      // Vex+ odds (unchanged): track lambda for Vex+ runes regardless of bucket.
-      if (VEX_PLUS_SET.has(item)) {
-        vexPlusExpected[item] = (vexPlusExpected[item] ?? 0) + n * prob;
-      }
-
-      // Value buckets (priced items only)
-      const v = priceInIst(item, phaseData);
-      if (!(v > 0)) continue;
-
+      // Predictable bucket: only per-mob prob >= 1%
       if (prob >= predictableMinProb) {
+        const v = priceInIst(item, phaseData);
+        if (!(v > 0)) continue;
+
         const c = n * prob * v;
         predictableIst += c;
         predictableByItemIst[item] = (predictableByItemIst[item] ?? 0) + c;
-        predictableExpectedDrops[item] = (predictableExpectedDrops[item] ?? 0) + n * prob;
-      } else {
-        const c = n * prob * v;
-        lotteryIst += c;
-        lotteryByItemIst[item] = (lotteryByItemIst[item] ?? 0) + c;
-        lotteryExpectedDrops[item] = (lotteryExpectedDrops[item] ?? 0) + n * prob;
+        expectedDrops[item] = (expectedDrops[item] ?? 0) + n * prob;
+        continue;
+      }
+
+      // Lottery bucket: only Vex+ runes, per-mob prob < 1%
+      if (VEX_PLUS_SET.has(item) && prob < predictableMinProb) {
+        vexPlusExpected[item] = (vexPlusExpected[item] ?? 0) + n * prob;
       }
     }
   }
@@ -205,50 +190,178 @@ export function computeMapEvModel({
     vexPlusProbByRune[r] = 1 - Math.exp(-l);
   }
 
-  // Lottery median (by contribution IST/run, but ordered by item value).
-  // We use contribution-weighted median so "realize time" reflects where most
-  // of the lottery value actually comes from.
-  let lotteryMedian = null;
-  if (lotteryIst > 0) {
-    const entries = Object.keys(lotteryExpectedDrops)
-      .map((k) => {
-        const item = String(k);
-        const expectedPerRun = Number(lotteryExpectedDrops[item] ?? 0);
-        const valueIst = priceInIst(item, phaseData);
-        const contribIstPerRun = Number(lotteryByItemIst[item] ?? 0);
-        return { item, expectedPerRun, valueIst, contribIstPerRun };
-      })
-      .filter((x) => x.expectedPerRun > 0 && x.valueIst > 0 && x.contribIstPerRun > 0)
-      .sort((a, b) => a.valueIst - b.valueIst);
-
-    const target = 0.5 * lotteryIst;
-    let acc = 0;
-    for (const e of entries) {
-      acc += e.contribIstPerRun;
-      if (acc >= target) { lotteryMedian = e; break; }
-    }
-    if (!lotteryMedian && entries.length) lotteryMedian = entries[entries.length - 1];
-  }
-
   return {
     predictable: {
       istPerRun: predictableIst,
       byItemIst: predictableByItemIst,
-      expectedDrops: predictableExpectedDrops,
+      expectedDrops,
     },
     lottery: {
-      istPerRun: lotteryIst,
-      byItemIst: lotteryByItemIst,
-      expectedDrops: lotteryExpectedDrops,
-      median: lotteryMedian,
-
-      // Vex+ odds (unchanged)
       vexPlusProb,
       vexPlusExpected,
       vexPlusProbByRune,
     },
     missingTc,
   };
+}
+
+// Split EV model (priced items only):
+//   PredictableValue: items with per-mob probability >= predictableMinProb
+//   LotteryValue: items with per-mob probability < predictableMinProb
+//
+// Returns a "value-weighted median" lottery item for "time to realize":
+//   Sort lottery items by EV contribution (istPerRun) desc, and take the first
+//   item where cumulative EV reaches 50% of total lottery EV.
+//
+// NOTE: this fixes the earlier inconsistency where "Realize (hrs)" could be
+// much larger than "Vex+ odds" just because the code picked an arbitrary
+// middle item in the lottery list (often a super-rare rune).
+export function computeMapEvSplitValues({
+  runTcCounts,
+  tcDropTable,
+  phaseData,
+  predictableMinProb = 0.01,
+}) {
+  const tcTable = tcDropTable?.tc ?? tcDropTable ?? {};
+
+  // Predictable (>=1%)
+  let predictableIst = 0;
+  const predictableByItemIst = {};
+  const predictableExpectedDrops = {};
+
+  // Lottery (<1%)
+  let lotteryIst = 0;
+  const lotteryByItemIst = {};
+  const lotteryExpectedDrops = {};
+
+  // Vex+ odds (keep unchanged; Poisson approx)
+  const vexPlusExpected = {};
+
+  const missingTc = [];
+
+  for (const [tc, Nt] of Object.entries(runTcCounts ?? {})) {
+    const n = Number(Nt ?? 0);
+    if (!(n > 0)) continue;
+
+    const drops = tcTable[tc];
+    if (!drops) {
+      missingTc.push(tc);
+      continue;
+    }
+
+    for (const [itemRaw, pRaw] of Object.entries(drops)) {
+      const prob = Number(pRaw ?? 0);
+      if (!(prob > 0)) continue;
+
+      const item = String(itemRaw ?? "").trim().toUpperCase();
+      const v = priceInIst(item, phaseData);
+      if (!(v > 0)) {
+        // unpriced => 0 contribution (explicitly per your rule)
+        // but still allow Vex+ odds to be computed (those are runes and priced)
+      }
+
+      // Keep Vex+ odds (regardless of predictable/lottery bucket)
+      if (VEX_PLUS_SET.has(item)) {
+        vexPlusExpected[item] = (vexPlusExpected[item] ?? 0) + n * prob;
+      }
+
+      if (!(v > 0)) continue;
+
+      const evIst = n * prob * v;
+      const evCnt = n * prob;
+
+      if (prob >= predictableMinProb) {
+        predictableIst += evIst;
+        predictableByItemIst[item] = (predictableByItemIst[item] ?? 0) + evIst;
+        predictableExpectedDrops[item] = (predictableExpectedDrops[item] ?? 0) + evCnt;
+      } else {
+        lotteryIst += evIst;
+        lotteryByItemIst[item] = (lotteryByItemIst[item] ?? 0) + evIst;
+        lotteryExpectedDrops[item] = (lotteryExpectedDrops[item] ?? 0) + evCnt;
+      }
+    }
+  }
+
+  // Vex+ probabilities (Poisson)
+  const lambdaTotal = Object.values(vexPlusExpected).reduce((a, b) => a + Number(b || 0), 0);
+  const vexPlusProb = 1 - Math.exp(-Math.max(0, lambdaTotal));
+
+  const vexPlusProbByRune = {};
+  for (const [r, lam] of Object.entries(vexPlusExpected)) {
+    const l = Math.max(0, Number(lam || 0));
+    vexPlusProbByRune[r] = 1 - Math.exp(-l);
+  }
+
+  // Value-weighted median lottery item (by EV contribution)
+  let lotteryMedian = null;
+  const items = Object.keys(lotteryByItemIst);
+  if (items.length && lotteryIst > 0) {
+    const rows = items
+      .map((k) => ({
+        item: k,
+        istPerRun: Number(lotteryByItemIst[k] ?? 0),
+        expectedPerRun: Number(lotteryExpectedDrops[k] ?? 0),
+        priceIst: priceInIst(k, phaseData),
+      }))
+      .filter((r) => r.istPerRun > 0 && r.expectedPerRun > 0)
+      .sort((a, b) => b.istPerRun - a.istPerRun);
+
+    const half = lotteryIst / 2;
+    let acc = 0;
+    for (const r of rows) {
+      acc += r.istPerRun;
+      if (acc >= half) {
+        lotteryMedian = r;
+        break;
+      }
+    }
+    if (!lotteryMedian && rows.length) lotteryMedian = rows[rows.length - 1];
+  }
+
+  return {
+    predictable: { istPerRun: predictableIst, byItemIst: predictableByItemIst, expectedDrops: predictableExpectedDrops },
+    lottery: { istPerRun: lotteryIst, byItemIst: lotteryByItemIst, expectedDrops: lotteryExpectedDrops, median: lotteryMedian },
+    vexPlus: { vexPlusProb, vexPlusExpected, vexPlusProbByRune },
+    missingTc,
+  };
+}
+
+// Real EV (IST/run): include ALL priced items (no min-prob threshold).
+// Any item missing from the price table contributes 0.
+export function computeMapEvRealValue({ runTcCounts, tcDropTable, phaseData }) {
+  const tcTable = tcDropTable?.tc ?? tcDropTable ?? {};
+
+  let istPerRun = 0;
+  const byItemIst = {};
+  const expectedDrops = {}; // expected count per run (priced items only)
+  const missingTc = [];
+
+  for (const [tc, Nt] of Object.entries(runTcCounts ?? {})) {
+    const n = Number(Nt ?? 0);
+    if (!(n > 0)) continue;
+
+    const drops = tcTable[tc];
+    if (!drops) {
+      missingTc.push(tc);
+      continue;
+    }
+
+    for (const [itemRaw, pRaw] of Object.entries(drops)) {
+      const prob = Number(pRaw ?? 0);
+      if (!(prob > 0)) continue;
+
+      const item = String(itemRaw ?? "").trim().toUpperCase();
+      const v = priceInIst(item, phaseData);
+      if (!(v > 0)) continue; // unpriced => 0
+
+      const cIst = n * prob * v;
+      istPerRun += cIst;
+      byItemIst[item] = (byItemIst[item] ?? 0) + cIst;
+      expectedDrops[item] = (expectedDrops[item] ?? 0) + n * prob;
+    }
+  }
+
+  return { istPerRun, byItemIst, expectedDrops, missingTc };
 }
 
 // Back-compat: old name returns the predictable (>=1%) IST/run only.
