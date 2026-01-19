@@ -5,7 +5,7 @@
 // - boss drops JSON provides expected item count per kill (not "chance at least one")
 // - prices come from /config/rune-price-table.json using O/N -> Ist per item
 
-import { getRunePriceIst, normRune } from "./priceTable.js";
+import { getRunePriceIst, resolvePriceKey } from "./priceTable.js";
 
 export const BOSSES = [
   { id: "countess", label: "Countess" },
@@ -48,7 +48,9 @@ export function computeBossRpk({ bossDropsJson, priceTable, phase }) {
   let rpkIst = 0;
 
   for (const [rawItem, rawCount] of Object.entries(drops)) {
-    const item = normRune(rawItem);
+    // Resolve to the canonical casing in the price table (case-insensitive match).
+    // This keeps display keys like "BlueEss" instead of "BLUEESS".
+    const item = resolvePriceKey(priceTable, phase, rawItem) || String(rawItem || "");
     const perKill = Number(rawCount);
     if (!(perKill > 0)) continue;
 
