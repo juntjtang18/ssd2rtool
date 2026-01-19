@@ -79,14 +79,14 @@
     <div class="row" style="margin-top:16px;">
       <div class="card">
         <h2 data-i18n="leaderboard.title">EV leaderboard</h2>
-        <div class="small" data-i18n="leaderboard.sort">Sorted by Real Ist/hour using each map’s own run settings.</div>
+        <div class="small" data-i18n="leaderboard.sort">Sorted by total IST/hour (Predictable + Lottery) using each map’s own run settings.</div>
         <div style="overflow:auto; margin-top:10px;">
           <table id="tbl"></table>
         </div>
       </div>
       <div class="card">
         <h2 data-i18n="details.title">Details</h2>
-        <div class="small" data-i18n="details.subtitle">Predictable drops (>=1%) + lottery drops (&lt;1%).</div>
+        <div class="small" data-i18n="details.subtitle">Predictable value (>=1%) + Lottery value (&lt;1%) + time to realize lottery value.</div>
         <div id="detail" style="margin-top:10px;"></div>
       </div>
     </div>
@@ -99,7 +99,6 @@
       getPhaseOptions,
       deriveRunTcCounts,
       computeMapEvModel,
-      computeMapEvRealValue,
       computePerHour
     } from "../model/mapEvCore.js";
 
@@ -273,16 +272,28 @@
       const minutesPerRun = Number(runCfg?.time?.minutesPerRun ?? row.minutesPerRun ?? 0);
       const isEditing = editOpenFor === row.mapId;
 
-      // Predictable drops: show expected count/run + IST/hour contribution
-      const predictable = Object.keys(row.expectedDrops ?? {})
+      // Predictable drops: expected count/run + IST/hour contribution (priced items only)
+      const predictable = Object.keys(row.predictableExpectedDrops ?? {})
         .map((k) => {
           const item = String(k);
-          const cnt = Number(row.expectedDrops?.[k] ?? 0);
-          const istPerRun = Number(row.byItemIst?.[k] ?? 0);
+          const cnt = Number(row.predictableExpectedDrops?.[k] ?? 0);
+          const istPerRun = Number(row.predictableByItemIst?.[k] ?? 0);
           const istPerHour = minutesPerRun > 0 ? (istPerRun * (60 / minutesPerRun)) : 0;
-          return { item, cnt, istPerRun, istPerHour };
+          return { item, cnt, istPerHour };
         })
-        .filter((x) => x.cnt > 0 && x.istPerRun > 0)
+        .filter((x) => x.cnt > 0 && x.istPerHour > 0)
+        .sort((a, b) => b.istPerHour - a.istPerHour);
+
+      // Lottery value: expected count/run + IST/hour contribution for items with per-mob prob < 1% (priced items only)
+      const lotteryValueItems = Object.keys(row.lotteryExpectedDrops ?? {})
+        .map((k) => {
+          const item = String(k);
+          const cnt = Number(row.lotteryExpectedDrops?.[k] ?? 0);
+          const istPerRun = Number(row.lotteryByItemIst?.[k] ?? 0);
+          const istPerHour = minutesPerRun > 0 ? (istPerRun * (60 / minutesPerRun)) : 0;
+          return { item, cnt, istPerHour };
+        })
+        .filter((x) => x.cnt > 0 && x.istPerHour > 0)
         .sort((a, b) => b.istPerHour - a.istPerHour);
 
       // Lottery drops: Vex+ (per-rune probability; Poisson approx)
@@ -336,6 +347,13 @@
           </div>
         ` : `<div class="small" style="margin-top:8px;">Tip: click <span class="mono">Edit time</span> to change <span class="mono">minutes/run</span> for this map.</div>`}
 
+        <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px;" class="small">
+          <span class="pill">Predictable <strong class="mono">${fmt(row.predictableIstPerHour,4)}</strong> IST/hour</span>
+          <span class="pill">Lottery <strong class="mono">${fmt(row.lotteryIstPerHour,4)}</strong> IST/hour</span>
+          <span class="pill">Realize <strong class="mono">${row.lotteryRealizeHours != null ? (row.lotteryRealizeHours < 100 ? row.lotteryRealizeHours.toFixed(1) : nfInt.format(Math.round(row.lotteryRealizeHours))) : "-"}</strong> hrs</span>
+          <span class="pill">Median lottery item <strong class="mono">${row.lotteryMedianItem ?? "-"}</strong></span>
+        </div>
+
         <div style="margin-top:14px;" class="small"><strong>Predictable Drops</strong> (>=1% per-mob; priced items only)</div>
         <table style="margin-top:6px; width:100%; border-collapse:collapse;">
           <tr><th>Item</th><th class="right">Expected/run</th><th class="right">IST/hour</th></tr>
@@ -351,7 +369,22 @@
           }
         </table>
 
-        <div style="margin-top:14px;" class="small"><strong>Lottery Drops</strong> (&lt;1% per-mob; Vex+ only)</div>
+        <div style="margin-top:14px;" class="small"><strong>Lottery Value</strong> (&lt;1% per-mob; priced items only)</div>
+        <table style="margin-top:6px; width:100%; border-collapse:collapse;">
+          <tr><th>Item</th><th class="right">Expected/run</th><th class="right">IST/hour</th></tr>
+          ${lotteryValueItems.length
+            ? lotteryValueItems.map((x) => `
+                <tr>
+                  <td class="mono">${x.item}</td>
+                  <td class="mono right">${fmt(x.cnt,6)}</td>
+                  <td class="mono right">${fmt(x.istPerHour,6)}</td>
+                </tr>
+              `).join("")
+            : `<tr><td colspan="3" class="small" style="color:var(--muted)">No lottery priced drops found (&lt;1% + priced).</td></tr>`
+          }
+        </table>
+
+        <div style="margin-top:14px;" class="small"><strong>Vex+ odds</strong> (unchanged)</div>
         <div class="small" style="margin-top:6px; color:var(--muted)">Combined Vex+ odds: <span class="mono">${showLottery ? oddsRuns(combinedP) : "-"}</span></div>
         <table style="margin-top:6px; width:100%; border-collapse:collapse;">
           <tr><th>Item</th><th class="right">Odds</th></tr>
@@ -411,12 +444,20 @@
         const runTcCounts = deriveRunTcCounts(b.map.tcCounts ?? {}, run);
         const phaseData = currentPhaseData(b.priceTable);
         const ev = computeMapEvModel({ runTcCounts, tcDropTable: b.tcDrop, phaseData });
-        const evReal = computeMapEvRealValue({ runTcCounts, tcDropTable: b.tcDrop, phaseData });
         const minutesPerRun = Number(run.time?.minutesPerRun ?? 0);
-        const istPerRun = ev.predictable.istPerRun;
-        const istPerHour = computePerHour(istPerRun, minutesPerRun);
-        const realIstPerRun = evReal.istPerRun;
-        const realIstPerHour = computePerHour(realIstPerRun, minutesPerRun);
+        const predictableIstPerRun = ev.predictable.istPerRun;
+        const lotteryIstPerRun = ev.lottery.istPerRun;
+        const predictableIstPerHour = computePerHour(predictableIstPerRun, minutesPerRun);
+        const lotteryIstPerHour = computePerHour(lotteryIstPerRun, minutesPerRun);
+
+        // Lottery realize time: based on the median lottery item (by contribution).
+        const median = ev.lottery?.median ?? null;
+        const lotteryMedianItem = median?.item ?? null;
+        const medExpected = Number(median?.expectedPerRun ?? 0);
+        const lotteryRealizeHours = (minutesPerRun > 0 && medExpected > 0)
+          ? ((1 / medExpected) * (minutesPerRun / 60))
+          : null;
+
         const vexPlusProb = ev.lottery.vexPlusProb;
         // For comparisons, show probability within one hour (not per-run),
         // using Poisson: p = 1 - exp(-lambda), where lambda_hour = lambda_run * runsPerHour.
@@ -427,30 +468,36 @@
         rows.push({
           mapId: m.mapId,
           name: m.name,
-          istPerRun,
-          istPerHour,
-          realIstPerRun,
-          realIstPerHour,
+          predictableIstPerRun,
+          lotteryIstPerRun,
+          predictableIstPerHour,
+          lotteryIstPerHour,
+          lotteryMedianItem,
+          lotteryRealizeHours,
           minutesPerRun,
-          byItemIst: ev.predictable.byItemIst,
+          predictableByItemIst: ev.predictable.byItemIst,
+          lotteryByItemIst: ev.lottery.byItemIst,
           missingTc: ev.missingTc,
           vexPlusProb,
           vexPlusProbHour,
           vexPlusExpected: ev.lottery.vexPlusExpected,
           vexPlusProbByRune: ev.lottery.vexPlusProbByRune,
-          expectedDrops: ev.predictable.expectedDrops
+          predictableExpectedDrops: ev.predictable.expectedDrops,
+          lotteryExpectedDrops: ev.lottery.expectedDrops
         });
       }
 
-      rows.sort((a,b)=>b.realIstPerHour - a.realIstPerHour);
+      // Sort by total IST/hour (Predictable + Lottery).
+      rows.sort((a,b)=>(b.predictableIstPerHour + b.lotteryIstPerHour) - (a.predictableIstPerHour + a.lotteryIstPerHour));
 
       const tbl = el("tbl");
       tbl.innerHTML = `
         <tr>
           <th>Map</th>
           <th></th>
-          <th class="right">IST/hour</th>
-          <th class="right">Real IST/hour</th>
+          <th class="right">Predictable IST/hour</th>
+          <th class="right">Lottery IST/hour</th>
+          <th class="right">Realize (hrs)</th>
           <th class="right">Vex+ odds/hour</th>
           <th class="right">min/run</th>
         </tr>
@@ -458,8 +505,9 @@
           <tr data-id="${r.mapId}" style="cursor:pointer">
             <td>${r.name}</td>
             <td class="right"><button data-gear="${r.mapId}" title="Edit" style="cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:var(--text); border-radius:10px; padding:6px 9px;">⚙️</button></td>
-            <td class="mono right">${fmt(r.istPerHour,4)}</td>
-            <td class="mono right">${fmt(r.realIstPerHour,4)}</td>
+            <td class="mono right">${fmt(r.predictableIstPerHour,4)}</td>
+            <td class="mono right">${fmt(r.lotteryIstPerHour,4)}</td>
+            <td class="mono right">${r.lotteryRealizeHours != null ? (r.lotteryRealizeHours < 100 ? r.lotteryRealizeHours.toFixed(1) : nfInt.format(Math.round(r.lotteryRealizeHours))) : "-"}</td>
             <td class="mono right">${oddsHours(r.vexPlusProbHour)}</td>
             <td class="mono right">${fmt(r.minutesPerRun,2)}</td>
           </tr>
