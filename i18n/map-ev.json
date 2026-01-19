@@ -14,15 +14,16 @@
     "defaultsNote": "Defaults come from <span class=\"mono\">/config/map_runs/*.run.json</span>. Click <span class=\"mono\">⚙️</span> on a map to customize <span class=\"mono\">minutes/run</span> (saved locally).",
 
     "leaderboard.title": "EV leaderboard",
-    "leaderboard.sort": "Sorted by total IST/hour (Predictable + Lottery) using each map’s own run settings.",
+    "leaderboard.sort": "Sorted by total Ist/hour (Predictable + Lottery) using each map’s own run settings.",
 
     "details.title": "Details",
-    "details.subtitle": "Predictable value (>=1%) + Lottery value (<1%) + time to realize lottery value.",
+    "details.subtitle": "Predictable drops (>=1%) + lottery drops (<1%).",
 
     "phase": "Phase {k}",
 
     "odds.runs": "~1 / {n} runs",
     "odds.hours": "~1 / {n} hrs",
+    "odds.hoursOnly": "{n} hrs",
 
     "pill.map": "map",
     "pill.phase": "phase",
@@ -48,15 +49,16 @@
     "defaultsNote": "預設值來自 <span class=\"mono\">/config/map_runs/*.run.json</span>。點地圖上的 <span class=\"mono\">⚙️</span> 可自訂 <span class=\"mono\">每局分鐘</span>（僅儲存在瀏覽器）。",
 
     "leaderboard.title": "EV 排行榜",
-    "leaderboard.sort": "使用各地圖自己的跑法設定，以（穩定+彩票）總 Ist/小時排序。",
+    "leaderboard.sort": "使用各地圖自己的跑法設定，以總 Ist/小時（穩定 + 彩票）排序。",
 
     "details.title": "詳細",
-    "details.subtitle": "穩定價值（>=1%）+ 彩票價值（<1%）+ 彩票價值落袋時間。",
+    "details.subtitle": "穩定掉落（>=1%）+ 彩票掉落（<1%）。",
 
     "phase": "第{k}階段",
 
     "odds.runs": "約 1 / {n} 局",
     "odds.hours": "約 1 / {n} 小時",
+    "odds.hoursOnly": "{n} 小時",
 
     "pill.map": "地圖",
     "pill.phase": "階段",
@@ -82,15 +84,16 @@
     "defaultsNote": "默认值来自 <span class=\"mono\">/config/map_runs/*.run.json</span>。点地图上的 <span class=\"mono\">⚙️</span> 可自定义 <span class=\"mono\">每局分钟</span>（仅保存在浏览器）。",
 
     "leaderboard.title": "EV 排行榜",
-    "leaderboard.sort": "使用各地图自己的跑法设置，以（稳定+彩票）总 Ist/小时排序。",
+    "leaderboard.sort": "使用各地图自己的跑法设置，以总 Ist/小时（稳定 + 彩票）排序。",
 
     "details.title": "详情",
-    "details.subtitle": "稳定价值（>=1%）+ 彩票价值（<1%）+ 彩票价值落袋时间。",
+    "details.subtitle": "稳定掉落（>=1%）+ 彩票掉落（<1%）。",
 
     "phase": "第{k}阶段",
 
     "odds.runs": "约 1 / {n} 局",
     "odds.hours": "约 1 / {n} 小时",
+    "odds.hoursOnly": "{n} 小时",
 
     "pill.map": "地图",
     "pill.phase": "阶段",
