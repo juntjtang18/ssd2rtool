@@ -104,6 +104,15 @@
           </div>
         </div>
 
+        <!-- Boss-column filter: Council(11) is a multi-member pack and can skew comparisons; allow toggling it. -->
+        <div class="ctrl">
+          <label data-i18n="ctrl.bossCols">Boss columns</label>
+          <div class="checkline">
+            <input id="showCouncil11" type="checkbox" />
+            <span data-i18n="ctrl.showCouncil11">Include Council (11) column</span>
+          </div>
+        </div>
+
         <div class="ctrl" style="min-width:260px;">
           <label data-i18n="ctrl.dataset">Dataset</label>
           <div class="pillbar" id="metaPills"></div>
@@ -164,7 +173,11 @@
     const PREFERRED_ORDER = ["EL","ELD","TIR","NEF","ETH","ITH","TAL","RAL","ORT","THUL","AMN","SOL","SHAEL","DOL","HEL","IO","LUM","KO","FAL","LEM","PUL","UM","MAL","IST","GUL","VEX","OHM","LO","SUR","BER","JAH","CHAM","ZOD"];
 
     let priceTable = null;
-    let bossesData = null; // [{id,label,data}, ...]
+    let bossesDataAll = null; // all loaded boss datasets (including optional columns)
+    let bossesData = null; // kept for backward-compat, but render now uses bossesDataAll
+
+    // Boss-column toggles
+    let includeCouncil11 = false; // default OFF to avoid mixing pack drops into single-boss comparison
 
     let showAll = false;
     // Default to DropCalc-style readability.
@@ -186,7 +199,7 @@
 
       // Show-all: union all rune keys observed in boss drop datasets.
       const seen = new Set();
-      for (const b of (bossesData || [])) {
+      for (const b of (bossesDataAll || [])) {
         const d = b?.data?.drops || {};
         for (const k of Object.keys(d)) {
           const rk = normRune(k);
@@ -201,10 +214,10 @@
       const extra = list.filter(r => !PREFERRED_ORDER.includes(r)).sort();
       return [...preferred, ...extra];
     }
-
     function currentBossColumns() {
-      // Council (5) is a pack (5 kills) and not comparable to single-boss columns, so we omit it here.
-      return BOSSES.filter(b => b.id !== "council5");
+      // Council (11) represents an 11-member council pack; it's not directly comparable to single-boss kills.
+      // Keep it hidden by default, but allow users to include it for reference.
+      return BOSSES.filter(b => b.id !== "council11" || includeCouncil11);
     }
 
     function buildBossOrder(runesMatrix, baseBosses) {
@@ -258,9 +271,10 @@
     }
 
     function buildMetaPills() {
-      const first = bossesData?.[0]?.data;
+      const first = bossesDataAll?.[0]?.data;
       const meta = formatBossMeta(first);
-      const bossCount = (bossesData || []).length;
+      // Count only *visible* boss columns (since Council(11) may be toggled off).
+      const bossCount = currentBossColumns().length;
       const modeLabel = (
         fmtMode === "onein" ? t("mode.onein") :
         fmtMode === "per10k" ? t("mode.per10k") :
@@ -284,7 +298,7 @@
 
       // matrix[bossId][rune] = perKill
       const matrix = {};
-      for (const b of bossesData) {
+      for (const b of (bossesDataAll || [])) {
         const d = b?.data?.drops || {};
         const m = {};
         for (const r of runes) m[r] = Number(d[r] || d[normRune(r)] || 0);
@@ -342,7 +356,8 @@
     }
 
     async function loadBossesData() {
-      const cols = currentBossColumns();
+      // Load all boss datasets up-front so toggling columns (e.g., Council(11)) doesn't require re-fetching.
+      const cols = BOSSES;
       const rows = await Promise.all(
         cols.map(async (b) => {
           const data = await loadBossDropsByFileId(b.id);
@@ -355,13 +370,22 @@
     async function main() {
       try {
         priceTable = await loadPriceTable();
-        bossesData = await loadBossesData();
+        bossesDataAll = await loadBossesData();
 
         await initI18n();
 
         // wire controls
         el("showAll").checked = showAll;
         el("showAll").onchange = (e) => { showAll = !!e.target.checked; sortRune = null; buildMetaPills(); render(); };
+
+        // Optional boss column: Council (11)
+        el("showCouncil11").checked = includeCouncil11;
+        el("showCouncil11").onchange = (e) => {
+          includeCouncil11 = !!e.target.checked;
+          // If sorting, keep the same rune, but rebuilding will reorder columns against the new set.
+          buildMetaPills();
+          render();
+        };
 
         el("fmtSel").value = fmtMode;
         el("fmtSel").onchange = (e) => { fmtMode = e.target.value; buildMetaPills(); render(); };

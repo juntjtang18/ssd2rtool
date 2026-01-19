@@ -6,26 +6,20 @@
     "lang.zhHant": "繁體",
     "lang.zhHans": "简体",
     "lang.en": "EN",
-
     "h1": "Boss Rune Drop Rates",
     "sub": "Table values are based on <span class=\"mono\">expected drop count per kill</span> (not \"chance of at least one\"). Click a rune name (left column) to sort bosses by that rune.",
-
     "ctrl.display": "Display",
     "opt.perkill": "Per kill (scientific)",
     "opt.onein": "1:N (DropCalc style)",
     "opt.per10k": "Per 10,000 kills",
     "opt.per1m": "Per 1,000,000 kills",
-
     "ctrl.precision": "Precision",
     "prec.compact": "Compact",
     "prec.normal": "Normal",
     "prec.detailed": "Detailed",
-
     "ctrl.rows": "Rows",
     "ctrl.showAll": "Show all runes from price table (otherwise: high runes only)",
-
     "ctrl.dataset": "Dataset",
-
     "pill.dataset": "dataset",
     "pill.bosses": "bosses",
     "pill.mode": "mode",
@@ -33,19 +27,17 @@
     "pill.sorted": "sorted",
     "pill.down": "down",
     "pill.up": "up",
-
     "mode.onein": "1:N",
     "mode.per10k": "per 10k",
     "mode.per1m": "per 1M",
     "mode.scientific": "scientific",
-
     "tbl.rune": "Rune",
-
-    "nav.back": "\u2190 Back",
+    "nav.back": "← Back",
     "tip.sort": "Tip: when a rune is selected for sorting, bosses are reordered left-to-right by that rune's drop rate.",
-    "tip.clickToSort": "Click to sort bosses by this rune"
+    "tip.clickToSort": "Click to sort bosses by this rune",
+    "ctrl.bossCols": "Boss columns",
+    "ctrl.showCouncil11": "Include Council (11) column"
   },
-
   "zh-Hant": {
     "title": "SSD2R 工具 — Boss 符文掉率",
     "lang.title": "語言",
@@ -53,26 +45,20 @@
     "lang.zhHant": "繁體",
     "lang.zhHans": "简体",
     "lang.en": "EN",
-
     "h1": "Boss 符文掉率",
     "sub": "表格數值基於 <span class=\"mono\">每次擊殺的期望掉落數</span>（不是\"至少掉 1 個\"的機率）。點左側的符文名稱可依該符文掉率排序 Boss。",
-
     "ctrl.display": "顯示",
     "opt.perkill": "每次擊殺（科學記號）",
     "opt.onein": "1:N（DropCalc 風格）",
     "opt.per10k": "每 10,000 次擊殺",
     "opt.per1m": "每 1,000,000 次擊殺",
-
     "ctrl.precision": "精度",
     "prec.compact": "精簡",
     "prec.normal": "一般",
     "prec.detailed": "詳細",
-
     "ctrl.rows": "列",
     "ctrl.showAll": "顯示價目表裡所有符文（否則：只顯示高符）",
-
     "ctrl.dataset": "資料集",
-
     "pill.dataset": "資料集",
     "pill.bosses": "Boss 數",
     "pill.mode": "模式",
@@ -80,19 +66,17 @@
     "pill.sorted": "排序",
     "pill.down": "降",
     "pill.up": "升",
-
     "mode.onein": "1:N",
     "mode.per10k": "每 10k",
     "mode.per1m": "每 1M",
     "mode.scientific": "科學記號",
-
     "tbl.rune": "符文",
-
-    "nav.back": "\u2190 返回",
+    "nav.back": "← 返回",
     "tip.sort": "提示：選中某符文後，Boss 會依該符文掉率由左到右重新排列。",
-    "tip.clickToSort": "點此以該符文排序 Boss"
+    "tip.clickToSort": "點此以該符文排序 Boss",
+    "ctrl.bossCols": "Boss 欄",
+    "ctrl.showCouncil11": "顯示 Council（11）欄位"
   },
-
   "zh-Hans": {
     "title": "SSD2R 工具 — Boss 符文掉率",
     "lang.title": "语言",
@@ -100,26 +84,20 @@
     "lang.zhHant": "繁體",
     "lang.zhHans": "简体",
     "lang.en": "EN",
-
     "h1": "Boss 符文掉率",
     "sub": "表格数值基于 <span class=\"mono\">每次击杀的期望掉落数</span>（不是\"至少掉 1 个\"的概率）。点左侧的符文名称可按该符文掉率排序 Boss。",
-
     "ctrl.display": "显示",
     "opt.perkill": "每次击杀（科学记号）",
     "opt.onein": "1:N（DropCalc 风格）",
     "opt.per10k": "每 10,000 次击杀",
     "opt.per1m": "每 1,000,000 次击杀",
-
     "ctrl.precision": "精度",
     "prec.compact": "精简",
     "prec.normal": "一般",
     "prec.detailed": "详细",
-
     "ctrl.rows": "行",
     "ctrl.showAll": "显示价目表里所有符文（否则：只显示高符）",
-
     "ctrl.dataset": "数据集",
-
     "pill.dataset": "数据集",
     "pill.bosses": "Boss 数",
     "pill.mode": "模式",
@@ -127,16 +105,15 @@
     "pill.sorted": "排序",
     "pill.down": "降",
     "pill.up": "升",
-
     "mode.onein": "1:N",
     "mode.per10k": "每 10k",
     "mode.per1m": "每 1M",
     "mode.scientific": "科学记号",
-
     "tbl.rune": "符文",
-
-    "nav.back": "\u2190 返回",
+    "nav.back": "← 返回",
     "tip.sort": "提示：选中某符文后，Boss 会按该符文掉率由左到右重新排列。",
-    "tip.clickToSort": "点此按该符文排序 Boss"
+    "tip.clickToSort": "点此按该符文排序 Boss",
+    "ctrl.bossCols": "Boss 列",
+    "ctrl.showCouncil11": "显示 Council（11）列"
   }
 }
