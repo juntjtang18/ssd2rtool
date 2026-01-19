@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SSD2R Tool</title>
+  <style>
+    :root { --bg:#0b0d10; --card:#12161c; --text:#e7eef7; --muted:#9db0c6; --line:#223041; --accent:#7bdcff; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 22px 16px 40px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius: 14px; padding: 14px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .tiny { color:var(--muted); font-size: 12px; line-height: 1.55; }
+
+    .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    h1 { margin: 6px 0 8px; font-size: 22px; }
+    /* Brand title: logo + localized title text */
+    .brandTitle { display:flex; align-items:center; gap:10px; }
+    .brandLogo { height: 28px; width: auto; display:block; }
+    .langbox { display:flex; align-items:center; gap:8px; margin-top: 6px; }
+    .langbox .globe { font-size: 16px; opacity:.9; }
+    .langbox select { width: 140px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1 class="brandTitle">
+          <!-- Logo switches by language (EN vs zh) in applyLang() below -->
+          <img id="brandImg" class="brandLogo" src="./images/StrongSoldier-Brand-en.png" alt="StrongSoldier" />
+          <span data-i18n="title">SSD2R Tool</span>
+        </h1>
+        <p class="tiny" data-i18n="subtitle">A small toolbox for D2R planning and calculators.</p>
+      </div>
+
+      <div class="langbox" data-i18n-title="lang.title">
+        <span class="globe">🌐</span>
+        <select id="langSel" data-i18n-aria-label="lang.aria">
+          <option value="zh-Hant" data-i18n="lang.zhHant">繁體</option>
+          <option value="zh-Hans" data-i18n="lang.zhHans">简体</option>
+          <option value="en" data-i18n="lang.en">EN</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="tools.title">Tools</h2>
+      <ul>
+        <li><a href="./pages/map-ev.html" data-i18n="tools.mapEv">Map EV Leaderboard (currency-only)</a></li>
+        <li><a href="./pages/model.html" data-i18n="tools.model">Keyset Pipeline Model (Y → X, runs, hours)</a></li>
+        <li><a href="./pages/rpk.html" data-i18n="tools.rpk">Boss RPK Leaderboard (Ist per kill)</a></li>
+        <li><a href="./pages/rune-drops.html" data-i18n="tools.runeDrops">Boss Rune Drop Rates (table)</a></li>
+        <li><a href="./pages/runewords-planner.html" data-i18n="tools.runewordsPlanner">Runewords Planner (target → farming plan)</a></li>
+        <!-- later: <li><a href="./pages/infinity.html">Infinity calculator</a></li> -->
+      </ul>
+    </div>
+  </div>
+
+  <script type="module">
+    import { detectLang, loadI18nJson, makeT, applyI18nToDom } from "./model/i18n.js";
+
+    const els = {
+      langSel: document.getElementById("langSel"),
+      brandImg: document.getElementById("brandImg"),
+    };
+
+    let dict = null;
+    let t = (k, vars=null) => k;
+
+    function applyLang(lang) {
+      localStorage.setItem("lang", lang);
+      t = makeT(dict, lang);
+      document.documentElement.lang = lang;
+      document.title = t("title");
+      applyI18nToDom(t);
+
+      // Switch brand logo by language (EN uses -en image; zh uses default).
+      const isEn = lang === "en";
+      els.brandImg.src = isEn ? "./images/StrongSoldier-Brand-en(120).png" : "./images/StrongSoldier-Brand(120).png";
+      els.brandImg.alt = isEn ? "StrongSoldier" : "斯壮游戏基地";
+      els.langSel.value = lang;
+    }
+
+    async function init() {
+      dict = await loadI18nJson("./i18n/index.json");
+      const lang = detectLang();
+      applyLang(lang);
+      els.langSel.addEventListener("change", () => applyLang(els.langSel.value));
+    }
+
+    init();
+  </script>
+</body>
+</html>
