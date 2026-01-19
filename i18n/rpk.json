@@ -34,7 +34,9 @@
 
     "phase": "Phase {k}",
     "pill.dataset": "dataset",
-    "pill.phase": "phase"
+    "pill.phase": "phase",
+    "opt.andQuestBug": "Assume Andariel quest-bug for essence",
+    "opt.andQuestBugHint": "If enabled, BlueEss uses 1/9 for Andariel (otherwise uses the non-quest rate from the dataset)."
   },
   "zh-Hant": {
     "title": "SSD2R 工具 — Boss RPK",
@@ -71,7 +73,9 @@
 
     "phase": "第{k}階段",
     "pill.dataset": "資料集",
-    "pill.phase": "階段"
+    "pill.phase": "階段",
+    "opt.andQuestBug": "假設安達利爾的『任務 Bug』對精華生效",
+    "opt.andQuestBugHint": "啟用後，安達利爾 BlueEss 以 1/9 計算（否則使用資料集中的非任務掉率）。"
   },
   "zh-Hans": {
     "title": "SSD2R 工具 — Boss RPK",
@@ -108,6 +112,8 @@
 
     "phase": "第{k}阶段",
     "pill.dataset": "数据集",
-    "pill.phase": "阶段"
+    "pill.phase": "阶段",
+    "opt.andQuestBug": "假设安达利尔“任务 Bug”对精华生效",
+    "opt.andQuestBugHint": "启用后，安达利尔 BlueEss 按 1/9 计算（否则使用数据集中的非任务掉率）。"
   }
 }

@@ -5,7 +5,7 @@
 // - boss drops JSON provides expected item count per kill (not "chance at least one")
 // - prices come from /config/rune-price-table.json using O/N -> Ist per item
 
-import { getRunePriceIst, resolvePriceKey } from "./priceTable.js";
+import { getRuneQuote, normRune } from "./priceTable.js";
 
 export const BOSSES = [
   { id: "countess", label: "Countess" },
@@ -42,22 +42,34 @@ export async function loadAllBossDrops(bosses = BOSSES) {
   return rows;
 }
 
-export function computeBossRpk({ bossDropsJson, priceTable, phase }) {
+export function computeBossRpk({ bossDropsJson, priceTable, phase, assumeAndarielQuestBug = false }) {
   const drops = bossDropsJson?.drops ?? {};
   const rows = [];
   let rpkIst = 0;
 
+  const bossId = String(bossDropsJson?.boss || "").trim().toLowerCase();
+
   for (const [rawItem, rawCount] of Object.entries(drops)) {
-    // Resolve to the canonical casing in the price table (case-insensitive match).
-    // This keeps display keys like "BlueEss" instead of "BLUEESS".
-    const item = resolvePriceKey(priceTable, phase, rawItem) || String(rawItem || "");
-    const perKill = Number(rawCount);
+    // Keep original key for matching; canonicalize only for comparisons.
+    const rawKey = String(rawItem || "").trim();
+    const perKill0 = Number(rawCount);
+    if (!(perKill0 > 0)) continue;
+
+    // Optional: Andariel "quest-bug" affects essence frequency in our model.
+    // We keep the base dataset as non-quest and only override the essence rate when enabled.
+    let perKill = perKill0;
+    if (assumeAndarielQuestBug && bossId === "andariel") {
+      const k = normRune(rawKey); // uppercase
+      if (k === "BLUEESS") perKill = 1 / 9; // quest-bugged Andariel essence
+    }
     if (!(perKill > 0)) continue;
 
-    const priceIst = getRunePriceIst(priceTable, phase, item);
-    const valueIst = perKill * (priceIst || 0);
+    const q = getRuneQuote(priceTable, phase, rawKey);
+    const item = q.key ?? rawKey;
+    const priceIst = q.priceIst || 0;
+    const valueIst = perKill * priceIst;
 
-    rows.push({ item, perKill, priceIst: priceIst || 0, valueIst });
+    rows.push({ item, perKill, priceIst, valueIst });
     rpkIst += valueIst;
   }
 

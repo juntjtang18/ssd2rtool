@@ -82,6 +82,16 @@
         <div>
           <label data-i18n="dataset">Dataset</label>
           <div class="pillbar" id="metaPills"></div>
+
+          <div style="margin-top:10px; display:flex; align-items:center; gap:10px;">
+            <input type="checkbox" id="andQuestBug" />
+            <label for="andQuestBug" style="margin:0; cursor:pointer;" data-i18n="opt.andQuestBug">
+              Assume Andariel quest-bug for essence
+            </label>
+          </div>
+          <div class="sub" style="margin-top:6px;" data-i18n="opt.andQuestBugHint">
+            If enabled, BlueEss uses 1/9 for Andariel (otherwise uses non-quest rate from dataset).
+          </div>
         </div>
       </div>
       <div class="err" id="loadErr" style="display:none; margin-top:10px;"></div>
@@ -136,12 +146,22 @@
     import { detectLang, loadI18nJson, makeT, applyI18nToDom } from "../model/i18n.js";
 
     const el = (id) => document.getElementById(id);
-    const fmt = (x, d=6) => (x == null || Number.isNaN(Number(x))) ? "—" : Number(x).toFixed(d);
-    const fmt2 = (x, d=2) => (x == null || Number.isNaN(Number(x))) ? "—" : Number(x).toFixed(d);
+    // Format numbers with at most N significant digits (no scientific notation).
+    function fmtSig(x, sig = 3) {
+      const n = Number(x);
+      if (x == null || Number.isNaN(n)) return "—";
+      if (!Number.isFinite(n)) return "—";
+      if (n === 0) return "0";
+      const a = Math.abs(n);
+      const exp = Math.floor(Math.log10(a));
+      const decimals = Math.max(0, sig - 1 - exp);
+      return n.toFixed(decimals);
+    }
 
     let priceTable = null;
     let phaseKey = null;
     let bossesData = null; // [{id,label,data}, ...]
+    let assumeAndarielQuestBug = false;
 
     // i18n
     let dict = null;
@@ -195,7 +215,7 @@
       const pills = [
         `<span class="pill">${t("pill.dataset")} <strong>${meta || "—"}</strong></span>`,
         `<span class="pill">${t("pill.phase")} <strong>${phaseKey}</strong></span>`,
-        `<span class="pill">UKEY <strong>${fmt(keyPrice,6)}</strong> ${t("unit.ist")}</span>`,
+        `<span class="pill">UKEY <strong>${fmtSig(keyPrice,3)}</strong> ${t("unit.ist")}</span>`,
       ];
       el("metaPills").innerHTML = pills.join("");
     }
@@ -205,7 +225,12 @@
       body.innerHTML = "";
 
       const rows = bossesData.map(b => {
-        const { rpkIst, rows: breakdown } = computeBossRpk({ bossDropsJson: b.data, priceTable, phase: phaseKey });
+        const { rpkIst, rows: breakdown } = computeBossRpk({
+          bossDropsJson: b.data,
+          priceTable,
+          phase: phaseKey,
+          assumeAndarielQuestBug,
+        });
         return { ...b, rpkIst, breakdown };
       }).sort((a,b)=> b.rpkIst - a.rpkIst);
 
@@ -214,8 +239,8 @@
         tr.className = "bossRow";
         tr.innerHTML = `
           <td><span style="font-weight:900;">${r.label}</span></td>
-          <td class="num">${fmt(r.rpkIst,10)}</td>
-          <td class="num">${fmt2(r.rpkIst*100,4)}</td>
+          <td class="num">${fmtSig(r.rpkIst,3)}</td>
+          <td class="num">${fmtSig(r.rpkIst*100,3)}</td>
         `;
         tr.onclick = () => renderBreakdown(r);
         body.appendChild(tr);
@@ -227,8 +252,10 @@
 
     function renderBreakdown(bossRow) {
       const meta = formatBossMeta(bossRow.data);
-      el("pickedMeta").textContent = `${bossRow.label} · ${meta}`;
-      el("pickedRpk").textContent = fmt(bossRow.rpkIst,10);
+      const bossId = String(bossRow?.data?.boss || "").trim().toLowerCase();
+      const extra = (assumeAndarielQuestBug && bossId === "andariel") ? " · quest-bug" : "";
+      el("pickedMeta").textContent = `${bossRow.label} · ${meta}${extra}`;
+      el("pickedRpk").textContent = fmtSig(bossRow.rpkIst,3);
 
       const body = el("itemTable");
       body.innerHTML = "";
@@ -240,9 +267,9 @@
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td class="mono" style="font-weight:900; color:var(--accent);">${x.item}</td>
-          <td class="num">${fmt(x.perKill,10)}</td>
-          <td class="num">${fmt(x.priceIst,10)}</td>
-          <td class="num">${fmt(x.valueIst,10)}</td>
+          <td class="num">${fmtSig(x.perKill,3)}</td>
+          <td class="num">${fmtSig(x.priceIst,3)}</td>
+          <td class="num">${fmtSig(x.valueIst,3)}</td>
         `;
         body.appendChild(tr);
       }
@@ -265,6 +292,14 @@
         await initI18n();
         priceTable = await loadPriceTable();
         bossesData = await loadAllBossDrops(BOSSES);
+
+        // Options
+        const cb = el("andQuestBug");
+        cb.checked = false;
+        cb.addEventListener("change", () => {
+          assumeAndarielQuestBug = !!cb.checked;
+          renderAll();
+        });
 
         buildPhaseSel();
         renderAll();
