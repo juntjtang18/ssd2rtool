@@ -137,23 +137,17 @@
 
 
         <details id="priceDetails">
-          <summary data-i18n="inputs.priceSummary">Customize price table (optional)</summary>
+          <summary data-i18n="inputs.priceSummary">Customize price table</summary>
 
-          <div class="tiny muted" style="margin-top:10px;" data-i18n="inputs.priceNote">
-            Override phase prices locally (JSON). Example: {"LO":8,"RAL":{"O":16,"N":1}}
-          </div>
+          <div class="tiny muted" style="margin-top:10px;" data-i18n="inputs.priceNote">Edit offer/need values. Saved locally in your browser.</div>
 
-          <div class="row" style="margin-top:10px;">
-            <label data-i18n="inputs.priceOverrides">Overrides (JSON)</label>
+          <div class="box" style="margin-top:10px; max-height:260px; overflow:auto;">
+            <table class="mono" id="priceTableEditor"></table>
           </div>
-          <textarea id="priceOverrides" class="mono" rows="7" style="width:100%; resize:vertical;" placeholder='{"LO":8,"RAL":{"O":16,"N":1}}'></textarea>
 
           <div class="row" style="justify-content:space-between; margin-top:10px;">
-            <div class="tiny muted" id="priceStatus"></div>
-            <div>
-              <button type="button" class="btnGhost" id="resetPrices" data-i18n="inputs.priceReset">Reset</button>
-              <button type="button" class="btn" id="applyPrices" data-i18n="inputs.priceApply">Apply</button>
-            </div>
+            <div class="tiny muted"></div>
+            <button type="button" class="btnGhost" id="resetPrices" data-i18n="inputs.priceReset">Reset</button>
           </div>
         </details>
 
@@ -248,16 +242,13 @@
       tS: el("tS"),
       tN: el("tN"),
       resetTimes: el("resetTimes"),
-
+   
       priceDetails: el("priceDetails"),
-      priceOverrides: el("priceOverrides"),
-      priceStatus: el("priceStatus"),
+      priceTableEditor: el("priceTableEditor"),
       resetPrices: el("resetPrices"),
-      applyPrices: el("applyPrices"),
     };
 
-    let basePriceTable = null;
-    let priceTable = null; // active (with overrides)
+    let priceTable = null;
     let runewordsData = null;
     let modelDefaults = null;
     let tcDropTable = null;
@@ -322,7 +313,10 @@
       els.langSel.value = lang;
 
       // refresh all dynamic UI using the selected language
-      if (rerender) calc();
+      if (rerender) {
+        renderPriceEditor();
+        calc();
+      }
     }
 
     function setPhaseDefault() {
@@ -364,8 +358,8 @@
       return (runewordsData.runewords || []).find(x => x.id === id);
     }
 
-    function renderRuneCost(rw, phase) {
-      const b = breakdownRuneword({ priceTable, phase, runes: rw.runes });
+    function renderRuneCost(rw, phase, effPriceTable) {
+      const b = breakdownRuneword({ priceTable: effPriceTable, phase, runes: rw.runes });
 
       els.totalCost.textContent = fmtIst1(b.totalIst);
 
@@ -619,6 +613,132 @@
       tN_min: "rt_tN_min",
     };
 
+    // Price table overrides (per phase), stored locally.
+    const PT_KEYS_PREFIX = "pt_override_";
+
+    function getPhasePriceTable(basePriceTable, phase) {
+      const p = String(phase);
+      return basePriceTable?.phases?.[p] || {};
+    }
+
+    function loadPriceOverrides(phase) {
+      try {
+        const raw = localStorage.getItem(PT_KEYS_PREFIX + String(phase));
+        if (!raw) return {};
+        const obj = JSON.parse(raw);
+        return obj && typeof obj === "object" ? obj : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function savePriceOverrides(phase, overrides) {
+      localStorage.setItem(PT_KEYS_PREFIX + String(phase), JSON.stringify(overrides || {}));
+    }
+
+    function resetPriceOverrides(phase) {
+      localStorage.removeItem(PT_KEYS_PREFIX + String(phase));
+    }
+
+    function buildEffectivePriceTable(basePriceTable, phase) {
+      const p = String(phase);
+      const base = getPhasePriceTable(basePriceTable, p);
+      const ov = loadPriceOverrides(p);
+
+      // Only allow overrides for existing items (no adding new ones).
+      const mergedPhase = {};
+      for (const k of Object.keys(base)) {
+        const b = base[k];
+        const o = ov[k];
+        if (o && typeof o === "object") {
+          const O = Number(o.O);
+          const N = Number(o.N);
+          mergedPhase[k] = {
+            O: Number.isFinite(O) && O > 0 ? O : Number(b.O),
+            N: Number.isFinite(N) && N > 0 ? N : Number(b.N),
+          };
+        } else {
+          mergedPhase[k] = b;
+        }
+      }
+
+      return {
+        ...basePriceTable,
+        phases: {
+          ...(basePriceTable?.phases || {}),
+          [p]: mergedPhase,
+        },
+      };
+    }
+
+    function renderPriceEditor() {
+      const phase = els.phase.value;
+      const base = getPhasePriceTable(priceTable, phase);
+      const ov = loadPriceOverrides(phase);
+
+      // Build table header
+      const tbl = els.priceTableEditor;
+      tbl.innerHTML = "";
+
+      const thead = document.createElement("tr");
+      thead.innerHTML = `
+        <th style="text-align:left; padding-right:12px;">Item</th>
+        <th style="text-align:right; padding-right:12px;">${t("inputs.priceOffer", "Offer")}</th>
+        <th style="text-align:right;">${t("inputs.priceNeed", "Need")}</th>
+      `;
+      tbl.appendChild(thead);
+
+      const keys = Object.keys(base);
+      for (const item of keys) {
+        const b = base[item];
+        const cur = ov[item] || b;
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td style="padding:6px 12px 6px 0;">${item}</td>
+          <td style="padding:6px 12px 6px 0; text-align:right;">
+            <input data-pt-item="${item}" data-pt-field="O" type="number" step="1" min="1"
+                   value="${Number(cur.O)}" style="width:90px;" />
+          </td>
+          <td style="padding:6px 0 6px 0; text-align:right;">
+            <input data-pt-item="${item}" data-pt-field="N" type="number" step="0.01" min="0"
+                   value="${Number(cur.N)}" style="width:90px;" />
+          </td>
+        `;
+        tbl.appendChild(tr);
+      }
+
+      // Attach listeners (event delegation)
+      tbl.querySelectorAll("input[data-pt-item]").forEach(inp => {
+        inp.addEventListener("change", () => {
+          const item = inp.getAttribute("data-pt-item");
+          const field = inp.getAttribute("data-pt-field"); // O or N
+          const baseRow = base[item];
+          if (!baseRow) return;
+
+          const overrides = loadPriceOverrides(phase);
+          const next = overrides[item] ? { ...overrides[item] } : {};
+
+          const v = Number(inp.value);
+          if (field === "O") next.O = Number.isFinite(v) && v > 0 ? v : Number(baseRow.O);
+          if (field === "N") next.N = Number.isFinite(v) && v >= 0 ? v : Number(baseRow.N);
+
+          // If equals base, remove override
+          const eqO = Number(next.O) === Number(baseRow.O);
+          const eqN = Number(next.N) === Number(baseRow.N);
+          if (eqO && eqN) {
+            delete overrides[item];
+          } else {
+            overrides[item] = { O: next.O, N: next.N };
+          }
+          savePriceOverrides(phase, overrides);
+          // Recalculate using the updated price table.
+          calc();
+        });
+      });
+    }
+
+
     function readPositiveNumber(x, fallback) {
       const n = Number(x);
       return Number.isFinite(n) && n > 0 ? n : fallback;
@@ -673,7 +793,9 @@
       const rw = getSelectedRuneword();
       if (!rw) return;
 
-      const b = renderRuneCost(rw, phase);
+      const effPriceTable = buildEffectivePriceTable(priceTable, phase);
+
+      const b = renderRuneCost(rw, phase, effPriceTable);
       const costIst = Number(b.totalIst || 0);
 
       // If the total cost is below 1 Ist (including 0 due to unpriced low runes),
@@ -686,7 +808,7 @@
       const plan = planRotationToTargetIst({
         targetIst: costIst,
         phase,
-        priceTable,
+        priceTable: effPriceTable,
         params: getParamsWithRuntimeOverrides(),
         tcDropTable,
         keyRuns,
@@ -701,17 +823,16 @@
     // init
     await initI18n();
 
-    basePriceTable = await loadPriceTable();
+    priceTable = await loadPriceTable();
     runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
     tcDropTable = await loadTcDropTable();
     keyRuns = await loadKeyRuns();
 
     loadRuntimeOverridesIntoInputs();
+    renderPriceEditor();
 
     setPhaseDefault();
-    priceTable = buildActivePriceTable(els.phase.value);
-    refreshPriceOverrideUi();
     renderRunewordOptions();
 
     // lang selector
@@ -719,155 +840,22 @@
     els.langSel.addEventListener("change", () => applyLang(els.langSel.value, { rerender: true }));
 
     els.calc.addEventListener("click", calc);
-    els.phase.addEventListener("change", () => {
-      priceTable = buildActivePriceTable(els.phase.value);
-      refreshPriceOverrideUi();
-      calc();
-    });
+    els.phase.addEventListener("change", () => { renderPriceEditor(); calc(); });
     els.rw.addEventListener("change", calc);
     els.q.addEventListener("input", () => { renderRunewordOptions(); calc(); });
 
-    
-    // ─────────────────────────────────────────────────────────────
-    // Price table overrides (local, per phase)
-    // Users can override prices to avoid debate; stored in localStorage.
-    // Format (JSON):
-    //   { "LO": 8, "RAL": { "O": 16, "N": 1 } }
-    // Number means {O:1, N:number}.
-    const PRICE_OVERRIDES_KEY = "ssd2rtool.priceOverrides.v1";
-
-    function loadAllPriceOverrides() {
-      try {
-        const raw = localStorage.getItem(PRICE_OVERRIDES_KEY);
-        if (!raw) return {};
-        const obj = JSON.parse(raw);
-        return (obj && typeof obj === "object") ? obj : {};
-      } catch {
-        return {};
-      }
-    }
-
-    function saveAllPriceOverrides(all) {
-      try {
-        localStorage.setItem(PRICE_OVERRIDES_KEY, JSON.stringify(all));
-      } catch {
-        // ignore
-      }
-    }
-
-    function getPhasePriceOverrides(phase) {
-      const all = loadAllPriceOverrides();
-      const p = String(phase);
-      const v = all[p];
-      return (v && typeof v === "object") ? v : null;
-    }
-
-    function setPhasePriceOverrides(phase, overridesOrNull) {
-      const all = loadAllPriceOverrides();
-      const p = String(phase);
-      if (!overridesOrNull || (typeof overridesOrNull === "object" && Object.keys(overridesOrNull).length === 0)) {
-        delete all[p];
-      } else {
-        all[p] = overridesOrNull;
-      }
-      saveAllPriceOverrides(all);
-    }
-
-    function normalizeOverrides(obj) {
-      const out = {};
-      if (!obj || typeof obj !== "object") return out;
-      for (const [k, v] of Object.entries(obj)) {
-        const key = String(k).trim();
-        if (!key) continue;
-
-        if (typeof v === "number") {
-          if (Number.isFinite(v) && v >= 0) out[key] = { O: 1, N: v };
-          continue;
-        }
-
-        if (v && typeof v === "object") {
-          const O = Number(v.O);
-          const N = Number(v.N);
-          if (Number.isFinite(O) && O > 0 && Number.isFinite(N) && N >= 0) {
-            out[key] = { O, N };
-          }
-        }
-      }
-      return out;
-    }
-
-    function buildActivePriceTable(phase) {
-      // Deep clone so we don't fight cached ci-index in priceTable.js
-      const pt = structuredClone(basePriceTable);
-      const p = String(phase);
-      const base = (pt.phases && pt.phases[p]) ? pt.phases[p] : {};
-      const ovRaw = getPhasePriceOverrides(p);
-      const ov = normalizeOverrides(ovRaw);
-      pt.phases[p] = { ...base, ...ov };
-      // Ensure phase exists
-      if (!pt.defaultPhase) pt.defaultPhase = Number(p) || 1;
-      return pt;
-    }
-
-    function refreshPriceOverrideUi() {
-      const p = els.phase.value;
-      const ov = getPhasePriceOverrides(p);
-      els.priceOverrides.value = ov ? JSON.stringify(ov, null, 2) : "";
-      if (!els.priceStatus) return;
-      if (ov && Object.keys(ov).length) {
-        els.priceStatus.textContent = t("inputs.priceStatusActive", { N: Object.keys(ov).length });
-      } else {
-        els.priceStatus.textContent = t("inputs.priceStatusNone");
-      }
-    }
-
-    function applyPriceOverridesFromTextarea() {
-      const p = els.phase.value;
-      const raw = (els.priceOverrides.value ?? "").trim();
-      if (!raw) {
-        setPhasePriceOverrides(p, null);
-        priceTable = buildActivePriceTable(p);
-        refreshPriceOverrideUi();
-        return { ok: true };
-      }
-      try {
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== "object") throw new Error("not an object");
-        const normalized = normalizeOverrides(parsed);
-        setPhasePriceOverrides(p, normalized);
-        priceTable = buildActivePriceTable(p);
-        refreshPriceOverrideUi();
-        return { ok: true };
-      } catch (e) {
-        return { ok: false, error: String(e?.message ?? e) };
-      }
-    }
-
-// runtime overrides
+    // runtime overrides
     const rtChanged = () => { saveRuntimeOverridesFromInputs(); calc(); };
     els.tC.addEventListener("change", rtChanged);
     els.tS.addEventListener("change", rtChanged);
     els.tN.addEventListener("change", rtChanged);
-    
-    // price table overrides
-    els.applyPrices.addEventListener("click", () => {
-      const r = applyPriceOverridesFromTextarea();
-      if (!r.ok) {
-        alert(`${t("inputs.priceInvalid")}: ${r.error}`);
-        return;
-      }
-      calc();
-    });
-
+    els.resetTimes.addEventListener("click", () => { resetRuntimeOverrides(); calc(); });
     els.resetPrices.addEventListener("click", () => {
-      els.priceOverrides.value = "";
-      setPhasePriceOverrides(els.phase.value, null);
-      priceTable = buildActivePriceTable(els.phase.value);
-      refreshPriceOverrideUi();
+      const phase = els.phase.value;
+      resetPriceOverrides(phase);
+      renderPriceEditor();
       calc();
     });
-
-els.resetTimes.addEventListener("click", () => { resetRuntimeOverrides(); calc(); });
 
     calc();
   </script>
