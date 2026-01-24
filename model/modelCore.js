@@ -1,4 +1,8 @@
 // /model/modelCore.js
+import { computeMapEvModel, deriveRunTcCounts } from "./mapEvCore.js";
+
+const DEFAULT_PREDICTABLE_MIN_PROB = 1 / 250; // drop rate >= 1:250 => predictable
+
 // D2R Keys Model — Theory EV using "1-key-at-a-time" scheduling per boss.
 // Repo file structure assumptions:
 //   /config/model-parameters.json
@@ -30,30 +34,69 @@ export async function loadModelConfigs() {
   const mpUrl = new URL("../config/model-parameters.json", import.meta.url);
   const ptUrl = new URL("../config/rune-price-table.json", import.meta.url);
 
-  // Optional: tc-drop-table + key-run tcSets, used by runewords planner & key pipeline
-  // to derive predictable vs lottery drops from real TC odds (instead of hard-coded extras).
+  // Optional (used by MapEV-style models + key pipeline improvements)
   const tcUrl = new URL("../config/tc/tc-drop-table.hell.p1.json", import.meta.url);
-  const runCUrl = new URL("../config/map_runs/tower-cellar-5.hell.p1.run.json", import.meta.url);
-  const runSUrl = new URL("../config/map_runs/arcane-sanctuary.hell.p1.run.json", import.meta.url);
-  const runNUrl = new URL("../config/map_runs/nilh-halls.hell.p1.run.json", import.meta.url);
+  const runCountessUrl = new URL("../config/map_runs/tower-cellar-5.hell.p1.run.json", import.meta.url);
+  const runSummonerUrl = new URL("../config/map_runs/arcane-sanctuary.hell.p1.run.json", import.meta.url);
+  const runNihlUrl = new URL("../config/map_runs/nilh-halls.hell.p1.run.json", import.meta.url);
 
-  const [modelParameters, priceTable, tcDropTable, keyRunC, keyRunS, keyRunN] = await Promise.all([
+  const [modelParameters, priceTable, tcDropTable, runCountess, runSummoner, runNihl] = await Promise.all([
     fetchJson(mpUrl.href),
     fetchJson(ptUrl.href),
-    // These are present in this repo; if they ever go missing in some fork, callers can ignore.
     fetchJson(tcUrl.href),
-    fetchJson(runCUrl.href),
-    fetchJson(runSUrl.href),
-    fetchJson(runNUrl.href),
+    fetchJson(runCountessUrl.href),
+    fetchJson(runSummonerUrl.href),
+    fetchJson(runNihlUrl.href),
   ]);
+
+  const keyRuns = { countess: runCountess, summoner: runSummoner, nihl: runNihl };
 
   return {
     modelParameters,
     priceTable,
     tcDropTable,
-    keyRuns: { countess: keyRunC, summoner: keyRunS, nihl: keyRunN },
-    paths: { mp: mpUrl.href, pt: ptUrl.href, tc: tcUrl.href, runC: runCUrl.href, runS: runSUrl.href, runN: runNUrl.href }
+    keyRuns,
+    paths: {
+      mp: mpUrl.href,
+      pt: ptUrl.href,
+      tc: tcUrl.href,
+      runCountess: runCountessUrl.href,
+      runSummoner: runSummonerUrl.href,
+      runNihl: runNihlUrl.href,
+    },
   };
+}
+
+
+
+function rotationEvValues({ schedule, tcDropTable, keyRuns, phaseData, predictableMinProb }) {
+  const hasTc = tcDropTable && keyRuns && phaseData;
+  if (!hasTc) {
+    return { extrasRegularIst: 0, bonusIst: 0, vexPlusProb: 0 };
+  }
+
+  const bosses = [
+    { id: "countess", runs: Number(schedule?.runs?.Rc ?? 0), runCfg: keyRuns.countess },
+    { id: "summoner", runs: Number(schedule?.runs?.Rs ?? 0), runCfg: keyRuns.summoner },
+    { id: "nihl", runs: Number(schedule?.runs?.Rn ?? 0), runCfg: keyRuns.nihl },
+  ];
+
+  let regularIst = 0;
+  let bonusIst = 0;
+  let vexPlusLambda = 0;
+
+  for (const b of bosses) {
+    if (!b.runCfg || !(b.runs > 0)) continue;
+    const runTcCounts = deriveRunTcCounts({}, b.runCfg);
+    const m = computeMapEvModel({ runTcCounts, tcDropTable, phaseData, predictableMinProb });
+
+    regularIst += Number(m?.predictable?.istPerRun ?? 0) * b.runs;
+    bonusIst += Number(m?.lottery?.istPerRun ?? 0) * b.runs;
+    vexPlusLambda += Number(m?.lottery?.vexPlusExpected ?? 0) * b.runs;
+  }
+
+  const vexPlusProb = vexPlusLambda > 0 ? (1 - Math.exp(-vexPlusLambda)) : 0;
+  return { extrasRegularIst: regularIst, bonusIst, vexPlusProb };
 }
 
 export function getPhaseOptions(priceTable) {
@@ -185,6 +228,9 @@ export function computeTheoryFromHours(params) {
   const tC_min = Number(params?.tC_min), tS_min = Number(params?.tS_min), tN_min = Number(params?.tN_min);
   const phaseData = params?.phaseData ?? {};
   const extras = params?.extras ?? [];
+  const tcDropTable = params?.tcDropTable ?? null;
+  const keyRuns = params?.keyRuns ?? null;
+  const predictableMinProb = Number(params?.predictableMinProb ?? DEFAULT_PREDICTABLE_MIN_PROB);
 
   const sched = scheduleFromHours({ hours: H, Dc, Ds, Dn, tC_min, tS_min, tN_min });
 
@@ -193,11 +239,21 @@ export function computeTheoryFromHours(params) {
   const keyIst = (kT + kH + kD) / 3;
   const keysetsEV = Math.min(kT, kH, kD);
 
-  const { vRegular, vBonus } = extrasValuePerCountessRun(extras, phaseData);
-  const Rc = sched.runs.Rc;
+  let extrasRegularIst = 0;
+  let bonusIst = 0;
+  let vexPlusProb = 0;
 
-  const extrasRegularIst = Rc * vRegular;
-  const bonusIst = Rc * vBonus;
+  if (tcDropTable && keyRuns) {
+    const ev = rotationEvValues({ schedule: sched, tcDropTable, keyRuns, phaseData, predictableMinProb });
+    extrasRegularIst = ev.extrasRegularIst;
+    bonusIst = ev.bonusIst;
+    vexPlusProb = ev.vexPlusProb;
+  } else {
+    const { vRegular, vBonus } = extrasValuePerCountessRun(extras, phaseData);
+    const Rc = sched.runs.Rc;
+    extrasRegularIst = Rc * vRegular;
+    bonusIst = Rc * vBonus;
+  }
 
   const totalIstExclBonus = keyIst + extrasRegularIst;
   const totalIstInclBonus = totalIstExclBonus + bonusIst;
@@ -211,6 +267,7 @@ export function computeTheoryFromHours(params) {
       bonusIst,
       totalIstExclBonus,
       totalIstInclBonus,
+      vexPlusProb,
     },
     rates: {
       istPerHourExclBonus: totalIstExclBonus / H,
@@ -237,7 +294,10 @@ export function computeTheoryFromTargetIst(params) {
     Dc, Ds, Dn,
     tC_min, tS_min, tN_min,
     extras,
-    phaseData
+    phaseData,
+    tcDropTable: params?.tcDropTable ?? null,
+    keyRuns: params?.keyRuns ?? null,
+    predictableMinProb: params?.predictableMinProb ?? DEFAULT_PREDICTABLE_MIN_PROB,
   });
 
   // Upper bound search

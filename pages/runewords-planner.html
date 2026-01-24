@@ -187,7 +187,6 @@
     import { loadPriceTable } from "../model/priceTable.js";
     import { breakdownRuneword } from "../model/runewordsPlanner.js";
     import { planRotationToTargetIst } from "../model/keysPipeline.js";
-    import { loadModelConfigs } from "../model/modelCore.js";
 
     import { detectLang, loadI18nJson, makeT, applyI18nToDom } from "../model/i18n.js";
 
@@ -232,9 +231,6 @@
     let priceTable = null;
     let runewordsData = null;
     let modelDefaults = null;
-    let tcDropTable = null;
-    let keyRuns = null;
-    // NOTE: tcDropTable/keyRuns are loaded via loadModelConfigs() (modelCore)
 
     // i18n
     let dict = null;
@@ -247,13 +243,11 @@
       return await res.json();
     }
 
-    async function loadPlannerModel() {
-      const cfg = await loadModelConfigs();
-      return {
-        defaults: cfg?.modelParameters?.defaults ?? null,
-        tcDropTable: cfg?.tcDropTable ?? null,
-        keyRuns: cfg?.keyRuns ?? null,
-      };
+    async function loadModelDefaults() {
+      const res = await fetch("../config/model-parameters.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load model-parameters.json: HTTP ${res.status}`);
+      const json = await res.json();
+      return json.defaults;
     }
 
     async function initI18n() {
@@ -405,9 +399,8 @@
       }
     }
 
-    // Predicted drops (integer-trimmed):
-    //  - Predictable: per-kill drop probability >= threshold (default 1:250)
-    //  - Lottery: rarer than threshold (shown as "Possible Bonus")
+    // Show all drops defined in drop table with dropRate >= 5% (regular extras),
+    // regardless of price. Bonus shown as "Possible Bonus" (pcs>=1).
     function renderPredictedDrops(plan) {
       const extras = (plan.predictedDrops && Array.isArray(plan.predictedDrops.extras))
         ? plan.predictedDrops.extras
@@ -416,10 +409,30 @@
         ? plan.predictedDrops.bonus
         : [];
 
+      const MIN_RATE = 0.05; // 5%
       const MIN_PCS = 1;
+
+      const getRateFromDefaults = (name) => {
+        const n = String(name || "").toUpperCase();
+        const arr = Array.isArray(modelDefaults?.extras) ? modelDefaults.extras : [];
+        const found = arr.find(x =>
+          String(x.name || x.id || "").toUpperCase().replace(/^BONUS\s*/i,"") === n
+        );
+        const dpr = Number(found?.dropPerRun ?? found?.D ?? found?.rate);
+        return Number.isFinite(dpr) ? dpr : 0;
+      };
+
+      const rate = (x) => {
+        const r = Number(x.dropRate);
+        if (Number.isFinite(r) && r > 0) return r;
+        return getRateFromDefaults(x.name);
+      };
+
       const extrasShown = extras
+        .map(x => ({ ...x, __r: rate(x) }))
         .filter(x => Number(x.pcs || 0) >= MIN_PCS)
-        .sort((a,b) => Number(b.dropRate||0) - Number(a.dropRate||0));
+        .filter(x => x.__r >= MIN_RATE)
+        .sort((a,b) => b.__r - a.__r);
 
       const bonusShown = bonus
         .filter(x => Number(x.pcs || 0) >= MIN_PCS)
@@ -447,17 +460,9 @@
         els.dropsTable.appendChild(tr(x.name, asInt(x.pcs)));
       }
 
-      const vexPlusChance = Number(plan?.predictedDrops?.vexPlusChance ?? 0);
-
-      if (bonusShown.length || vexPlusChance > 0) {
+      if (bonusShown.length) {
         els.dropsTable.appendChild(tr("", ""));
         els.dropsTable.appendChild(tr(t("drops.bonusTitle"), "", "muted"));
-
-        if (vexPlusChance > 0) {
-          const pct = `${Math.round(vexPlusChance * 100)}%`;
-          els.dropsTable.appendChild(tr(t("drops.vexPlusChance"), pct));
-        }
-
         for (const b of bonusShown) {
           els.dropsTable.appendChild(tr(b.name, asInt(b.pcs)));
         }
@@ -624,10 +629,9 @@
         phase,
         priceTable,
         params: getParamsWithRuntimeOverrides(),
-        buffer: 1.0,
-        tcDropTable,
-        keyRuns,
-        predictableMinProb: 1/250,
+        tcDropTable: cfg.tcDropTable,
+        keyRuns: cfg.keyRuns,
+        buffer: 1.0
       });
 
       renderPlan(plan);
@@ -640,12 +644,7 @@
 
     priceTable = await loadPriceTable();
     runewordsData = await loadRunewords();
-    {
-      const cfg = await loadModelConfigs();
-      modelDefaults = cfg?.modelParameters?.defaults ?? null;
-      tcDropTable = cfg?.tcDropTable ?? null;
-      keyRuns = cfg?.keyRuns ?? null;
-    }
+    modelDefaults = await loadModelDefaults();
 
     loadRuntimeOverridesIntoInputs();
 

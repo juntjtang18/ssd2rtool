@@ -111,6 +111,7 @@
 
   <script type="module">
     import { loadModelConfigs, getPhaseOptions, computeTheoryFromHours, computeTheoryFromTargetIst, priceInIst } from "../model/modelCore.js";
+    import { computeMapEvModel, deriveRunTcCounts } from "../model/mapEvCore.js";
     import { detectLang, loadI18nJson, makeT, applyI18nToDom } from "../model/i18n.js";
 
     const el = (id) => document.getElementById(id);
@@ -160,12 +161,60 @@
         tC_min: Number(d.tC_min),
         tS_min: Number(d.tS_min),
         tN_min: Number(d.tN_min),
-        extras: d.extras ?? []
+        extras: d.extras ?? [],
+        tcDropTable: cfg?.tcDropTable ?? null,
+        keyRuns: cfg?.keyRuns ?? null,
+        predictableMinProb: 1/250
       };
     }
 
-    function buildQuickStats() {
-      const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras } = getDefaults();
+    
+    function computeRotationDrops({ schedule }) {
+      const { tcDropTable, keyRuns, predictableMinProb } = getDefaults();
+      const phaseData = currentPhaseData();
+      if (!tcDropTable || !keyRuns) return { regular: [], bonus: [], vexPlusProb: 0 };
+
+      const bosses = [
+        { id: "countess", runs: Number(schedule?.runs?.Rc ?? 0), runCfg: keyRuns.countess },
+        { id: "summoner", runs: Number(schedule?.runs?.Rs ?? 0), runCfg: keyRuns.summoner },
+        { id: "nihl", runs: Number(schedule?.runs?.Rn ?? 0), runCfg: keyRuns.nihl },
+      ];
+
+      const regMap = new Map();
+      const bonMap = new Map();
+      let vexPlusLambda = 0;
+
+      for (const b of bosses) {
+        if (!b.runCfg || !(b.runs > 0)) continue;
+        const runTcCounts = deriveRunTcCounts({}, b.runCfg);
+        const m = computeMapEvModel({ runTcCounts, tcDropTable, phaseData, predictableMinProb });
+
+        for (const [item, perRun] of Object.entries(m?.predictable?.expectedDrops ?? {})) {
+          const k = String(item ?? "").trim().toUpperCase();
+          if (!k || ["UKEY","TKEY","HKEY","DKEY","KEYSET"].includes(k)) continue;
+          regMap.set(k, (regMap.get(k) || 0) + Number(perRun) * b.runs);
+        }
+        for (const [item, perRun] of Object.entries(m?.lottery?.expectedDrops ?? {})) {
+          const k = String(item ?? "").trim().toUpperCase();
+          if (!k || ["UKEY","TKEY","HKEY","DKEY","KEYSET"].includes(k)) continue;
+          bonMap.set(k, (bonMap.get(k) || 0) + Number(perRun) * b.runs);
+        }
+
+        vexPlusLambda += Number(m?.lottery?.vexPlusExpected ?? 0) * b.runs;
+      }
+
+      const vexPlusProb = vexPlusLambda > 0 ? (1 - Math.exp(-vexPlusLambda)) : 0;
+
+      const toList = (m) => [...m.entries()]
+        .filter(([,qty]) => qty > 0)
+        .map(([name, qty]) => ({ name, qty }))
+        .sort((a,b) => b.qty - a.qty);
+
+      return { regular: toList(regMap), bonus: toList(bonMap), vexPlusProb };
+    }
+
+function buildQuickStats() {
+      const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras, tcDropTable, keyRuns, predictableMinProb } = getDefaults();
       const pd = currentPhaseData();
 
       const timePerKeyC = (tC_min / Dc);
@@ -203,22 +252,7 @@
       const sMin = Rs * tS_min;
       const nMin = Rn * tN_min;
 
-      const regularDrops = [];
-      const bonusDrops = [];
-
-      for (const x of (extras ?? [])) {
-        const rawName = String(x?.name ?? "").trim();
-        const dpr = Number(x?.dropPerRun ?? 0);
-        if (!rawName || !(dpr > 0)) continue;
-
-        const isBonus = /^BONUS\b/i.test(rawName);
-        const name = isBonus ? rawName.replace(/^BONUS\s*/i, "").trim() : rawName;
-        const qty = Rc * dpr;
-
-        const item = { name, qty };
-        if (isBonus) bonusDrops.push(item);
-        else regularDrops.push(item);
-      }
+      const { regular: regularDrops, bonus: bonusDrops, vexPlusProb } = computeRotationDrops({ schedule: s });
 
       const inlineList = (items) => {
         if (!items.length) return t("none");
@@ -263,8 +297,8 @@
 
         <div class="divider"></div>
 
-        <div class="sub cap">Bonus Drops (EV)</div>
-        <div class="itemsLine">${inlineList(bonusDrops)}</div>
+        <div class="sub cap">Bonus Drops (Lottery, EV)</div>
+        <div class="itemsLine">${(vexPlusProb>0?(`Vex+ ≥1: ${(vexPlusProb*100).toFixed(1)}% · `):"")}${inlineList(bonusDrops)}</div>
       `;
     }
 
@@ -286,20 +320,7 @@
       const sMin = Rs * tS_min;
       const nMin = Rn * tN_min;
 
-      const regularDrops = [];
-      const bonusDrops = [];
-      for (const x of (extras ?? [])) {
-        const rawName = String(x?.name ?? "").trim();
-        const dpr = Number(x?.dropPerRun ?? 0);
-        if (!rawName || !(dpr > 0)) continue;
-
-        const isBonus = /^BONUS\b/i.test(rawName);
-        const name = isBonus ? rawName.replace(/^BONUS\s*/i, "").trim() : rawName;
-        const qty = Rc * dpr;
-        const item = { name, qty };
-        if (isBonus) bonusDrops.push(item);
-        else regularDrops.push(item);
-      }
+      const { regular: regularDrops, bonus: bonusDrops, vexPlusProb } = computeRotationDrops({ schedule: s });
 
       const inlineList = (items) => {
         if (!items.length) return "(none)";
@@ -349,8 +370,8 @@
 
         <div class="divider"></div>
 
-        <div class="sub cap">Bonus Drops (EV)</div>
-        <div class="itemsLine">${inlineList(bonusDrops)}</div>
+        <div class="sub cap">Bonus Drops (Lottery, EV)</div>
+        <div class="itemsLine">${(vexPlusProb>0?(`Vex+ ≥1: ${(vexPlusProb*100).toFixed(1)}% · `):"")}${inlineList(bonusDrops)}</div>
 
         <div class="note">Target solving uses bisection over the same EV rotation model.</div>
       `;
@@ -377,13 +398,16 @@
 
         el("btnHours").addEventListener("click", () => {
           const hours = Number(el("hours").value);
-          const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras } = getDefaults();
+          const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras, tcDropTable, keyRuns, predictableMinProb } = getDefaults();
           const r = computeTheoryFromHours({
             hours,
             Dc, Ds, Dn,
             tC_min, tS_min, tN_min,
             extras,
-            phaseData: currentPhaseData()
+            phaseData: currentPhaseData(),
+            tcDropTable,
+            keyRuns,
+            predictableMinProb
           });
           lastCalc = { kind: "hours", result: r, input: hours };
           renderFromHours(r, hours);
@@ -391,13 +415,16 @@
 
         el("btnTarget").addEventListener("click", () => {
           const targetIst = Number(el("targetIst").value);
-          const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras } = getDefaults();
+          const { Dc, Ds, Dn, tC_min, tS_min, tN_min, extras, tcDropTable, keyRuns, predictableMinProb } = getDefaults();
           const res = computeTheoryFromTargetIst({
             targetIst,
             Dc, Ds, Dn,
             tC_min, tS_min, tN_min,
             extras,
-            phaseData: currentPhaseData()
+            phaseData: currentPhaseData(),
+            tcDropTable,
+            keyRuns,
+            predictableMinProb
           });
           lastCalc = { kind: "target", result: res, input: targetIst };
           renderTarget(res, targetIst);
