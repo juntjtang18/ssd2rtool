@@ -632,7 +632,53 @@
       }
     }
 
-    function savePriceOverrides(phase, overrides) {
+    
+    function gcdInt(a, b) {
+      a = Math.abs(Math.round(a));
+      b = Math.abs(Math.round(b));
+      while (b) {
+        const t = a % b;
+        a = b;
+        b = t;
+      }
+      return a || 1;
+    }
+
+    // Normalize a quote into integer Offer/Need (O/N), by scaling to clear decimals.
+    // Example: N=0.5 -> O*=2, N=1; N=0.1 -> O*=10, N=1
+    function normalizeQuote(q) {
+      if (q == null) return { O: 1, N: 1 };
+
+      let O, N;
+      if (typeof q === "number") {
+        O = 1;
+        N = Number(q);
+      } else {
+        O = Number(q.O ?? 1);
+        N = Number(q.N ?? 1);
+      }
+
+      if (!Number.isFinite(O) || O <= 0) O = 1;
+      if (!Number.isFinite(N) || N <= 0) N = 1;
+
+      // find smallest scale (<= 1000) that makes N*scale an integer
+      const eps = 1e-9;
+      let scale = 1;
+      for (let s = 1; s <= 1000; s++) {
+        const v = N * s;
+        if (Math.abs(v - Math.round(v)) < eps) { scale = s; break; }
+      }
+
+      O = Math.round(O * scale);
+      N = Math.round(N * scale);
+
+      // reduce ratio
+      const g = gcdInt(O, N);
+      O = Math.max(1, Math.round(O / g));
+      N = Math.max(1, Math.round(N / g));
+      return { O, N };
+    }
+function savePriceOverrides(phase, overrides) {
       localStorage.setItem(PT_KEYS_PREFIX + String(phase), JSON.stringify(overrides || {}));
     }
 
@@ -690,8 +736,8 @@
 
       const keys = Object.keys(base);
       for (const item of keys) {
-        const b = base[item];
-        const cur = ov[item] || b;
+        const b = normalizeQuote(base[item]);
+        const cur = normalizeQuote(ov[item] || b);
 
         const tr = document.createElement("tr");
         tr.innerHTML = `
@@ -701,7 +747,7 @@
                    value="${Number(cur.O)}" style="width:90px;" />
           </td>
           <td style="padding:6px 0 6px 0; text-align:right;">
-            <input data-pt-item="${item}" data-pt-field="N" type="number" step="0.01" min="0"
+            <input data-pt-item="${item}" data-pt-field="N" type="number" step="1" min="1"
                    value="${Number(cur.N)}" style="width:90px;" />
           </td>
         `;
@@ -713,15 +759,14 @@
         inp.addEventListener("change", () => {
           const item = inp.getAttribute("data-pt-item");
           const field = inp.getAttribute("data-pt-field"); // O or N
-          const baseRow = base[item];
-          if (!baseRow) return;
+          const baseRow = normalizeQuote(base[item]);
 
           const overrides = loadPriceOverrides(phase);
           const next = overrides[item] ? { ...overrides[item] } : {};
 
-          const v = Number(inp.value);
-          if (field === "O") next.O = Number.isFinite(v) && v > 0 ? v : Number(baseRow.O);
-          if (field === "N") next.N = Number.isFinite(v) && v >= 0 ? v : Number(baseRow.N);
+          const v = parseInt(inp.value, 10);
+          if (field === "O") next.O = Number.isFinite(v) && v >= 1 ? v : Number(baseRow.O);
+          if (field === "N") next.N = Number.isFinite(v) && v >= 1 ? v : Number(baseRow.N);
 
           // If equals base, remove override
           const eqO = Number(next.O) === Number(baseRow.O);
@@ -729,7 +774,7 @@
           if (eqO && eqN) {
             delete overrides[item];
           } else {
-            overrides[item] = { O: next.O, N: next.N };
+            overrides[item] = { O: Math.round(next.O), N: Math.round(next.N) };
           }
           savePriceOverrides(phase, overrides);
           // Recalculate using the updated price table.
