@@ -146,6 +146,14 @@ function buildRotationDropModelFromTc({ tcDropTable, keyRuns, priceTable, phase,
   const combined = {};
   for (const keyCanon of items) {
     const kUpper = String(keyCanon).trim().toUpperCase();
+
+    // IMPORTANT:
+    // UKEY represents the *keys themselves* (Key of Terror/Hate/Destruction)
+    // bucketized into a single currency. We already value keys via full keysets
+    // (min(T, H, D)) in this planner, so including UKEY here would double-count
+    // key revenue and make the plan stop too early.
+    if (kUpper === "UKEY") continue;
+
     const pMax = Number(maxProbByItem[kUpper] ?? 0);
     const bucket = pMax >= minProb ? "predictable" : "lottery";
 
