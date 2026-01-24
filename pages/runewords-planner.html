@@ -136,6 +136,28 @@
         </details>
 
 
+        <details id="priceDetails">
+          <summary data-i18n="inputs.priceSummary">Customize price table (optional)</summary>
+
+          <div class="tiny muted" style="margin-top:10px;" data-i18n="inputs.priceNote">
+            Override phase prices locally (JSON). Example: {"LO":8,"RAL":{"O":16,"N":1}}
+          </div>
+
+          <div class="row" style="margin-top:10px;">
+            <label data-i18n="inputs.priceOverrides">Overrides (JSON)</label>
+          </div>
+          <textarea id="priceOverrides" class="mono" rows="7" style="width:100%; resize:vertical;" placeholder='{"LO":8,"RAL":{"O":16,"N":1}}'></textarea>
+
+          <div class="row" style="justify-content:space-between; margin-top:10px;">
+            <div class="tiny muted" id="priceStatus"></div>
+            <div>
+              <button type="button" class="btnGhost" id="resetPrices" data-i18n="inputs.priceReset">Reset</button>
+              <button type="button" class="btn" id="applyPrices" data-i18n="inputs.priceApply">Apply</button>
+            </div>
+          </div>
+        </details>
+
+
         <div class="tiny" style="margin-top:10px;">
           <a href="../index.html" data-i18n="nav.back">← Back</a> &nbsp;|&nbsp;
           <a href="./model.html" data-i18n="nav.keyPipeline">Key Pipeline</a>
@@ -226,9 +248,16 @@
       tS: el("tS"),
       tN: el("tN"),
       resetTimes: el("resetTimes"),
+
+      priceDetails: el("priceDetails"),
+      priceOverrides: el("priceOverrides"),
+      priceStatus: el("priceStatus"),
+      resetPrices: el("resetPrices"),
+      applyPrices: el("applyPrices"),
     };
 
-    let priceTable = null;
+    let basePriceTable = null;
+    let priceTable = null; // active (with overrides)
     let runewordsData = null;
     let modelDefaults = null;
     let tcDropTable = null;
@@ -672,7 +701,7 @@
     // init
     await initI18n();
 
-    priceTable = await loadPriceTable();
+    basePriceTable = await loadPriceTable();
     runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
     tcDropTable = await loadTcDropTable();
@@ -681,6 +710,8 @@
     loadRuntimeOverridesIntoInputs();
 
     setPhaseDefault();
+    priceTable = buildActivePriceTable(els.phase.value);
+    refreshPriceOverrideUi();
     renderRunewordOptions();
 
     // lang selector
@@ -688,16 +719,155 @@
     els.langSel.addEventListener("change", () => applyLang(els.langSel.value, { rerender: true }));
 
     els.calc.addEventListener("click", calc);
-    els.phase.addEventListener("change", calc);
+    els.phase.addEventListener("change", () => {
+      priceTable = buildActivePriceTable(els.phase.value);
+      refreshPriceOverrideUi();
+      calc();
+    });
     els.rw.addEventListener("change", calc);
     els.q.addEventListener("input", () => { renderRunewordOptions(); calc(); });
 
-    // runtime overrides
+    
+    // ─────────────────────────────────────────────────────────────
+    // Price table overrides (local, per phase)
+    // Users can override prices to avoid debate; stored in localStorage.
+    // Format (JSON):
+    //   { "LO": 8, "RAL": { "O": 16, "N": 1 } }
+    // Number means {O:1, N:number}.
+    const PRICE_OVERRIDES_KEY = "ssd2rtool.priceOverrides.v1";
+
+    function loadAllPriceOverrides() {
+      try {
+        const raw = localStorage.getItem(PRICE_OVERRIDES_KEY);
+        if (!raw) return {};
+        const obj = JSON.parse(raw);
+        return (obj && typeof obj === "object") ? obj : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function saveAllPriceOverrides(all) {
+      try {
+        localStorage.setItem(PRICE_OVERRIDES_KEY, JSON.stringify(all));
+      } catch {
+        // ignore
+      }
+    }
+
+    function getPhasePriceOverrides(phase) {
+      const all = loadAllPriceOverrides();
+      const p = String(phase);
+      const v = all[p];
+      return (v && typeof v === "object") ? v : null;
+    }
+
+    function setPhasePriceOverrides(phase, overridesOrNull) {
+      const all = loadAllPriceOverrides();
+      const p = String(phase);
+      if (!overridesOrNull || (typeof overridesOrNull === "object" && Object.keys(overridesOrNull).length === 0)) {
+        delete all[p];
+      } else {
+        all[p] = overridesOrNull;
+      }
+      saveAllPriceOverrides(all);
+    }
+
+    function normalizeOverrides(obj) {
+      const out = {};
+      if (!obj || typeof obj !== "object") return out;
+      for (const [k, v] of Object.entries(obj)) {
+        const key = String(k).trim();
+        if (!key) continue;
+
+        if (typeof v === "number") {
+          if (Number.isFinite(v) && v >= 0) out[key] = { O: 1, N: v };
+          continue;
+        }
+
+        if (v && typeof v === "object") {
+          const O = Number(v.O);
+          const N = Number(v.N);
+          if (Number.isFinite(O) && O > 0 && Number.isFinite(N) && N >= 0) {
+            out[key] = { O, N };
+          }
+        }
+      }
+      return out;
+    }
+
+    function buildActivePriceTable(phase) {
+      // Deep clone so we don't fight cached ci-index in priceTable.js
+      const pt = structuredClone(basePriceTable);
+      const p = String(phase);
+      const base = (pt.phases && pt.phases[p]) ? pt.phases[p] : {};
+      const ovRaw = getPhasePriceOverrides(p);
+      const ov = normalizeOverrides(ovRaw);
+      pt.phases[p] = { ...base, ...ov };
+      // Ensure phase exists
+      if (!pt.defaultPhase) pt.defaultPhase = Number(p) || 1;
+      return pt;
+    }
+
+    function refreshPriceOverrideUi() {
+      const p = els.phase.value;
+      const ov = getPhasePriceOverrides(p);
+      els.priceOverrides.value = ov ? JSON.stringify(ov, null, 2) : "";
+      if (!els.priceStatus) return;
+      if (ov && Object.keys(ov).length) {
+        els.priceStatus.textContent = t("inputs.priceStatusActive", { N: Object.keys(ov).length });
+      } else {
+        els.priceStatus.textContent = t("inputs.priceStatusNone");
+      }
+    }
+
+    function applyPriceOverridesFromTextarea() {
+      const p = els.phase.value;
+      const raw = (els.priceOverrides.value ?? "").trim();
+      if (!raw) {
+        setPhasePriceOverrides(p, null);
+        priceTable = buildActivePriceTable(p);
+        refreshPriceOverrideUi();
+        return { ok: true };
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") throw new Error("not an object");
+        const normalized = normalizeOverrides(parsed);
+        setPhasePriceOverrides(p, normalized);
+        priceTable = buildActivePriceTable(p);
+        refreshPriceOverrideUi();
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: String(e?.message ?? e) };
+      }
+    }
+
+// runtime overrides
     const rtChanged = () => { saveRuntimeOverridesFromInputs(); calc(); };
     els.tC.addEventListener("change", rtChanged);
     els.tS.addEventListener("change", rtChanged);
     els.tN.addEventListener("change", rtChanged);
-    els.resetTimes.addEventListener("click", () => { resetRuntimeOverrides(); calc(); });
+    
+    // price table overrides
+    els.applyPrices.addEventListener("click", () => {
+      const r = applyPriceOverridesFromTextarea();
+      if (!r.ok) {
+        alert(`${t("inputs.priceInvalid")}: ${r.error}`);
+        return;
+      }
+      calc();
+    });
+
+    els.resetPrices.addEventListener("click", () => {
+      els.priceOverrides.value = "";
+      setPhasePriceOverrides(els.phase.value, null);
+      priceTable = buildActivePriceTable(els.phase.value);
+      refreshPriceOverrideUi();
+      calc();
+    });
+
+els.resetTimes.addEventListener("click", () => { resetRuntimeOverrides(); calc(); });
 
     calc();
   </script>

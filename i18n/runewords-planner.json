@@ -36,7 +36,15 @@
     "inputs.runtime.summoner": "Summoner run (min)",
     "inputs.runtime.nihil": "Nihlathak run (min)",
     "inputs.runtimeNote": "Saved locally in your browser.",
-    "inputs.runtimeReset": "Reset"
+    "inputs.runtimeReset": "Reset",
+    "inputs.priceSummary": "Customize price table (optional)",
+    "inputs.priceNote": "Override phase prices locally (JSON). Example: {\"LO\":8,\"RAL\":{\"O\":16,\"N\":1}}",
+    "inputs.priceOverrides": "Overrides (JSON)",
+    "inputs.priceApply": "Apply",
+    "inputs.priceReset": "Reset",
+    "inputs.priceStatusNone": "No overrides for this phase.",
+    "inputs.priceStatusActive": "Overrides active: {N} item(s).",
+    "inputs.priceInvalid": "Invalid price overrides JSON"
   },
   "zh-Hant": {
     "title": "SSD2R 工具 — 符文之語規劃器",
@@ -75,7 +83,15 @@
     "inputs.runtime.summoner": "Summoner 平均用時(min)：",
     "inputs.runtime.nihil": "Nihlathak 平均用時(min)：",
     "inputs.runtimeNote": "只會存到你的瀏覽器（localStorage）。",
-    "inputs.runtimeReset": "重設為預設"
+    "inputs.runtimeReset": "重設為預設",
+    "inputs.priceSummary": "自訂價格表（可選）",
+    "inputs.priceNote": "只在本機瀏覽器套用（JSON）。例如：{\"LO\":8,\"RAL\":{\"O\":16,\"N\":1}}",
+    "inputs.priceOverrides": "覆寫（JSON）",
+    "inputs.priceApply": "套用",
+    "inputs.priceReset": "重設",
+    "inputs.priceStatusNone": "此賽季階段沒有覆寫。",
+    "inputs.priceStatusActive": "已套用覆寫：{N} 項。",
+    "inputs.priceInvalid": "價格覆寫 JSON 格式錯誤"
   },
   "zh-Hans": {
     "title": "SSD2R 工具 — 符文之语规划器",
@@ -114,6 +130,14 @@
     "inputs.runtime.summoner": "Summoner 平均用时(min)：",
     "inputs.runtime.nihil": "Nihlathak 平均用时(min)：",
     "inputs.runtimeNote": "只会保存在你的浏览器（localStorage）。",
-    "inputs.runtimeReset": "重置为默认"
+    "inputs.runtimeReset": "重置为默认",
+    "inputs.priceSummary": "自定义价格表（可选）",
+    "inputs.priceNote": "仅在本机浏览器生效（JSON）。例如：{\"LO\":8,\"RAL\":{\"O\":16,\"N\":1}}",
+    "inputs.priceOverrides": "覆盖（JSON）",
+    "inputs.priceApply": "应用",
+    "inputs.priceReset": "重置",
+    "inputs.priceStatusNone": "此赛季阶段没有覆盖。",
+    "inputs.priceStatusActive": "已应用覆盖：{N} 项。",
+    "inputs.priceInvalid": "价格覆盖 JSON 格式错误"
   }
 }
