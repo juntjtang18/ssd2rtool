@@ -234,8 +234,7 @@
     let modelDefaults = null;
     let tcDropTable = null;
     let keyRuns = null;
-    let tcDropTable = null;
-    let keyRuns = null;
+    // NOTE: tcDropTable/keyRuns are loaded via loadModelConfigs() (modelCore)
 
     // i18n
     let dict = null;
@@ -253,8 +252,7 @@
       return {
         defaults: cfg?.modelParameters?.defaults ?? null,
         tcDropTable: cfg?.tcDropTable ?? null,
-        keyRuns: cfg?.keyRuns ?? cfg?.keyRuns ?? cfg?.keyRuns, // defensive
-        keyRuns2: cfg?.keyRuns,
+        keyRuns: cfg?.keyRuns ?? null,
       };
     }
 
