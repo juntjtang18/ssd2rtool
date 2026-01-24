@@ -184,10 +184,10 @@
   </div>
 
   <script type="module">
-    import { loadModelConfigs } from "../model/modelCore.js";
+    import { loadPriceTable } from "../model/priceTable.js";
     import { breakdownRuneword } from "../model/runewordsPlanner.js";
     import { planRotationToTargetIst } from "../model/keysPipeline.js";
-    import { deriveRunTcCounts, computeMapEvModel } from "../model/mapEvCore.js";
+    import { loadModelConfigs } from "../model/modelCore.js";
 
     import { detectLang, loadI18nJson, makeT, applyI18nToDom } from "../model/i18n.js";
 
@@ -203,48 +203,6 @@
     function asInt(x) {
       const n = Number(x ?? 0);
       return String(Math.ceil(n));
-    }
-
-    function sumObj(o) {
-      return Object.values(o ?? {}).reduce((a,b)=>a+Number(b||0), 0);
-    }
-
-    function attachVexPlusLottery(plan, phase) {
-      try {
-        if (!highRuneBundle?.tcDrop) return plan;
-
-        const phaseData = (priceTable?.phases ?? {})?.[String(phase)] ?? {};
-
-        const lamC = sumObj(computeMapEvModel({
-          runTcCounts: deriveRunTcCounts({}, highRuneBundle.runC),
-          tcDropTable: highRuneBundle.tcDrop,
-          phaseData
-        })?.lottery?.vexPlusExpected);
-
-        const lamS = sumObj(computeMapEvModel({
-          runTcCounts: deriveRunTcCounts({}, highRuneBundle.runS),
-          tcDropTable: highRuneBundle.tcDrop,
-          phaseData
-        })?.lottery?.vexPlusExpected);
-
-        const lamN = sumObj(computeMapEvModel({
-          runTcCounts: deriveRunTcCounts({}, highRuneBundle.runN),
-          tcDropTable: highRuneBundle.tcDrop,
-          phaseData
-        })?.lottery?.vexPlusExpected);
-
-        const Rc = Number(plan?.runs?.countess ?? 0);
-        const Rs = Number(plan?.runs?.summoner ?? 0);
-        const Rn = Number(plan?.runs?.nihl ?? 0);
-
-        const lambdaTotal = Math.max(0, Rc*lamC + Rs*lamS + Rn*lamN);
-        const vexPlusProb = 1 - Math.exp(-lambdaTotal);
-
-        plan.lottery = { vexPlusProb };
-      } catch (_) {
-        // ignore
-      }
-      return plan;
     }
 
     const els = {
@@ -271,10 +229,13 @@
       resetTimes: el("resetTimes"),
     };
 
-        let priceTable = null;
+    let priceTable = null;
     let runewordsData = null;
     let modelDefaults = null;
-    let highRuneBundle = null;
+    let tcDropTable = null;
+    let keyRuns = null;
+    let tcDropTable = null;
+    let keyRuns = null;
 
     // i18n
     let dict = null;
@@ -287,26 +248,14 @@
       return await res.json();
     }
 
-    // modelDefaults are loaded via loadModelConfigs() (modelCore) so that Countess extras
-    // can be derived from boss_drops instead of hardcoding odds.
-    async function loadModelDefaultsFromConfigs(cfg) {
-      return (cfg?.modelParameters?.defaults) ?? {};
-    }
-
-    async function loadHighRuneBundle() {
-      // Vex+ odds use the same Poisson approximation as map-ev model.
-      const tcUrl = new URL("../config/tc/tc-drop-table.hell.p1.json", import.meta.url);
-      const cUrl = new URL("../config/map_runs/tower-cellar-5.hell.p1.run.json", import.meta.url);
-      const sUrl = new URL("../config/map_runs/arcane-sanctuary.hell.p1.run.json", import.meta.url);
-      const nUrl = new URL("../config/map_runs/nilh-halls.hell.p1.run.json", import.meta.url);
-
-      const [tcDrop, runC, runS, runN] = await Promise.all([
-        (await fetch(tcUrl.href, { cache: "no-store" })).json(),
-        (await fetch(cUrl.href, { cache: "no-store" })).json(),
-        (await fetch(sUrl.href, { cache: "no-store" })).json(),
-        (await fetch(nUrl.href, { cache: "no-store" })).json(),
-      ]);
-      return { tcDrop, runC, runS, runN };
+    async function loadPlannerModel() {
+      const cfg = await loadModelConfigs();
+      return {
+        defaults: cfg?.modelParameters?.defaults ?? null,
+        tcDropTable: cfg?.tcDropTable ?? null,
+        keyRuns: cfg?.keyRuns ?? cfg?.keyRuns ?? cfg?.keyRuns, // defensive
+        keyRuns2: cfg?.keyRuns,
+      };
     }
 
     async function initI18n() {
@@ -458,12 +407,25 @@
       }
     }
 
-    // Show all drops defined in drop table with dropRate >= 5% (regular extras),
-    // regardless of price. Bonus shown as "Possible Bonus" (pcs>=1).
-    function renderPredictableAndLotteryDrops(plan) {
+    // Predicted drops (integer-trimmed):
+    //  - Predictable: per-kill drop probability >= threshold (default 1:250)
+    //  - Lottery: rarer than threshold (shown as "Possible Bonus")
+    function renderPredictedDrops(plan) {
       const extras = (plan.predictedDrops && Array.isArray(plan.predictedDrops.extras))
         ? plan.predictedDrops.extras
         : [];
+      const bonus = (plan.predictedDrops && Array.isArray(plan.predictedDrops.bonus))
+        ? plan.predictedDrops.bonus
+        : [];
+
+      const MIN_PCS = 1;
+      const extrasShown = extras
+        .filter(x => Number(x.pcs || 0) >= MIN_PCS)
+        .sort((a,b) => Number(b.dropRate||0) - Number(a.dropRate||0));
+
+      const bonusShown = bonus
+        .filter(x => Number(x.pcs || 0) >= MIN_PCS)
+        .sort((a,b) => Number(b.pcs||0) - Number(a.pcs||0));
 
       els.dropsTable.innerHTML = "";
 
@@ -480,27 +442,24 @@
         return row;
       };
 
-      // --- Predictable drops (integer-only) ---
+      // Always show keysets
       els.dropsTable.appendChild(tr(t("drops.keysets"), String(plan.keys.keysets), "k"));
-      const extrasShown = extras
-        .filter(x => Number(x.pcs || 0) >= 1)
-        .sort((a,b) => Number(b.pcs||0) - Number(a.pcs||0));
 
       for (const x of extrasShown) {
-        els.dropsTable.appendChild(tr(String(x.name), asInt(x.pcs)));
+        els.dropsTable.appendChild(tr(x.name, asInt(x.pcs)));
       }
 
-      // --- Lottery drops (chance only) ---
-      const pVexPlus = Number(plan?.lottery?.vexPlusProb ?? 0);
-      if (Number.isFinite(pVexPlus) && pVexPlus > 0) {
+      const vexPlusChance = Number(plan?.predictedDrops?.vexPlusChance ?? 0);
+
+      if (bonusShown.length || vexPlusChance > 0) {
         els.dropsTable.appendChild(tr("", ""));
         els.dropsTable.appendChild(tr(t("drops.bonusTitle"), "", "muted"));
-        els.dropsTable.appendChild(tr(t("drops.vexPlusChance"), `${(pVexPlus*100).toFixed(1)}%`));
-      }
-    }
-      if (bonusShown.length) {
-        els.dropsTable.appendChild(tr("", ""));
-        els.dropsTable.appendChild(tr(t("drops.bonusTitle"), "", "muted"));
+
+        if (vexPlusChance > 0) {
+          const pct = `${Math.round(vexPlusChance * 100)}%`;
+          els.dropsTable.appendChild(tr(t("drops.vexPlusChance"), pct));
+        }
+
         for (const b of bonusShown) {
           els.dropsTable.appendChild(tr(b.name, asInt(b.pcs)));
         }
@@ -667,23 +626,28 @@
         phase,
         priceTable,
         params: getParamsWithRuntimeOverrides(),
-        buffer: 1.0
+        buffer: 1.0,
+        tcDropTable,
+        keyRuns,
+        predictableMinProb: 1/250,
       });
-      attachVexPlusLottery(plan, phase);
 
       renderPlan(plan);
       renderTradeList(plan);
-      renderPredictableAndLotteryDrops(plan);
+      renderPredictedDrops(plan);
     }
 
     // init
     await initI18n();
 
-    const cfg = await loadModelConfigs();
-    priceTable = cfg.priceTable;
+    priceTable = await loadPriceTable();
     runewordsData = await loadRunewords();
-    modelDefaults = await loadModelDefaultsFromConfigs(cfg);
-    highRuneBundle = await loadHighRuneBundle();
+    {
+      const cfg = await loadModelConfigs();
+      modelDefaults = cfg?.modelParameters?.defaults ?? null;
+      tcDropTable = cfg?.tcDropTable ?? null;
+      keyRuns = cfg?.keyRuns ?? null;
+    }
 
     loadRuntimeOverridesIntoInputs();
 

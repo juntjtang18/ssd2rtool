@@ -25,87 +25,35 @@ async function fetchJson(url) {
   return res.json();
 }
 
-
-// --- Derived extras (Countess) ---------------------------------------------
-// Goal: don't hardcode rune odds in model-parameters.json.
-// Instead, derive Countess dropPerRun from /config/boss_drops/boss.countess.drops.json.
-//
-// "Predictable" in planner means: we only count *integer* pieces (floor), so
-// below-odds runs naturally show 0 and never show decimals.
-
-const RUNE_ORDER = [
-  "EL","ELD","TIR","NEF","ETH","ITH","TAL","RAL","ORT","THUL","AMN","SOL","SHAEL","DOL",
-  "HEL","IO","LUM","KO","FAL","LEM","PUL","UM","MAL","IST","GUL","VEX","OHM","LO",
-  "SUR","BER","JAH","CHAM","ZOD"
-];
-const RUNE_IDX = new Map(RUNE_ORDER.map((r,i)=>[r,i]));
-
-function unionPriceKeys(priceTable) {
-  const phases = priceTable?.phases ?? {};
-  const out = new Set();
-  for (const p of Object.values(phases)) {
-    for (const k of Object.keys(p ?? {})) out.add(String(k).toUpperCase());
-  }
-  return out;
-}
-
-function deriveCountessExtras({ countessDrops, priceTable, maxPredictableRune = "IST" }) {
-  const drops = countessDrops?.drops ?? countessDrops ?? {};
-  const maxIdx = RUNE_IDX.has(String(maxPredictableRune).toUpperCase())
-    ? RUNE_IDX.get(String(maxPredictableRune).toUpperCase())
-    : RUNE_IDX.get("IST");
-
-  const priceKeys = unionPriceKeys(priceTable);
-
-  // 1) predictable rune set: all runes <= IST (or maxPredictableRune), using *real* odds.
-  const runeRows = [];
-  for (const [k, v] of Object.entries(drops)) {
-    const name = String(k).toUpperCase();
-    const dpr = Number(v ?? 0);
-    if (!(dpr > 0)) continue;
-    if (!RUNE_IDX.has(name)) continue;
-    if (RUNE_IDX.get(name) > maxIdx) continue;
-    if (!priceKeys.has(name)) continue;
-    runeRows.push({ name, dropPerRun: dpr });
-  }
-  runeRows.sort((a,b)=> (RUNE_IDX.get(a.name) ?? 999) - (RUNE_IDX.get(b.name) ?? 999));
-
-  // 2) misc predictable items (e.g., FG/FA) if priced
-  const misc = [];
-  for (const [k, v] of Object.entries(drops)) {
-    const name = String(k).toUpperCase();
-    const dpr = Number(v ?? 0);
-    if (!(dpr > 0)) continue;
-    if (RUNE_IDX.has(name)) continue;
-    if (!priceKeys.has(name)) continue;
-    misc.push({ name, dropPerRun: dpr });
-  }
-  misc.sort((a,b)=> b.dropPerRun - a.dropPerRun);
-
-  return [...runeRows, ...misc];
-}
 export async function loadModelConfigs() {
   // GitHub Pages project site safe: resolve relative to this module's URL.
   const mpUrl = new URL("../config/model-parameters.json", import.meta.url);
   const ptUrl = new URL("../config/rune-price-table.json", import.meta.url);
-  const countessUrl = new URL("../config/boss_drops/boss.countess.drops.json", import.meta.url);
 
-  const [modelParameters, priceTable, countessDrops] = await Promise.all([
+  // Optional: tc-drop-table + key-run tcSets, used by runewords planner & key pipeline
+  // to derive predictable vs lottery drops from real TC odds (instead of hard-coded extras).
+  const tcUrl = new URL("../config/tc/tc-drop-table.hell.p1.json", import.meta.url);
+  const runCUrl = new URL("../config/map_runs/tower-cellar-5.hell.p1.run.json", import.meta.url);
+  const runSUrl = new URL("../config/map_runs/arcane-sanctuary.hell.p1.run.json", import.meta.url);
+  const runNUrl = new URL("../config/map_runs/nilh-halls.hell.p1.run.json", import.meta.url);
+
+  const [modelParameters, priceTable, tcDropTable, keyRunC, keyRunS, keyRunN] = await Promise.all([
     fetchJson(mpUrl.href),
     fetchJson(ptUrl.href),
-    fetchJson(countessUrl.href),
+    // These are present in this repo; if they ever go missing in some fork, callers can ignore.
+    fetchJson(tcUrl.href),
+    fetchJson(runCUrl.href),
+    fetchJson(runSUrl.href),
+    fetchJson(runNUrl.href),
   ]);
 
-  // Override defaults.extras with derived Countess odds (runes <= IST + priced misc like FG/FA).
-  try {
-    const d = modelParameters?.defaults ?? {};
-    d.extras = deriveCountessExtras({ countessDrops, priceTable, maxPredictableRune: "IST" });
-    modelParameters.defaults = d;
-  } catch (_) {
-    // If anything goes wrong, fall back to whatever is in model-parameters.json
-  }
-
-  return { modelParameters, priceTable, paths: { mp: mpUrl.href, pt: ptUrl.href, countess: countessUrl.href } };
+  return {
+    modelParameters,
+    priceTable,
+    tcDropTable,
+    keyRuns: { countess: keyRunC, summoner: keyRunS, nihl: keyRunN },
+    paths: { mp: mpUrl.href, pt: ptUrl.href, tc: tcUrl.href, runC: runCUrl.href, runS: runSUrl.href, runN: runNUrl.href }
+  };
 }
 
 export function getPhaseOptions(priceTable) {

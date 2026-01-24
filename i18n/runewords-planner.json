@@ -13,9 +13,10 @@
     "planner.lowCostHint": "Just run Countess to get the necessary runes.",
     "planner.tradeList": "Trade list (extras)",
     "cost.title": "Rune cost",
-    "drops.title": "Predictable drops (integer-only)",
+    "drops.title": "Predicted drops",
     "drops.keysets": "Keysets",
-    "drops.bonusTitle": "Lottery drops",
+    "drops.bonusTitle": "Possible Bonus (Not Guaranteed)",
+    "drops.vexPlusChance": "Vex+ (≥1) chance",
     "nav.back": "← Back",
     "nav.keyPipeline": "Key Pipeline",
     "phase.1": "Phase 1",
@@ -32,8 +33,7 @@
     "inputs.runtime.summoner": "Summoner run (min)",
     "inputs.runtime.nihil": "Nihlathak run (min)",
     "inputs.runtimeNote": "Saved locally in your browser.",
-    "inputs.runtimeReset": "Reset",
-    "drops.vexPlusChance": "At least 1× Vex+"
+    "inputs.runtimeReset": "Reset"
   },
   "zh-Hant": {
     "title": "SSD2R 工具 — 符文之語規劃器",
@@ -49,9 +49,10 @@
     "planner.lowCostHint": "成本低於 1 Ist：直接刷女伯爵就能掉齊需要的低符文。",
     "planner.tradeList": "交易清單（額外掉落）",
     "cost.title": "成本拆解",
-    "drops.title": "可預期掉落（只計整數）",
+    "drops.title": "預測掉落",
     "drops.keysets": "Keyset",
-    "drops.bonusTitle": "抽獎掉落（機率）",
+    "drops.bonusTitle": "可能的 Bonus（不保證）",
+    "drops.vexPlusChance": "Vex+（至少 1 顆）機率",
     "nav.back": "← 返回",
     "nav.keyPipeline": "Key Pipeline",
     "phase.1": "第 1 階段",
@@ -68,8 +69,7 @@
     "inputs.runtime.summoner": "Summoner 平均用時(min)：",
     "inputs.runtime.nihil": "Nihlathak 平均用時(min)：",
     "inputs.runtimeNote": "只會存到你的瀏覽器（localStorage）。",
-    "inputs.runtimeReset": "重設為預設",
-    "drops.vexPlusChance": "至少 1 顆 Vex+"
+    "inputs.runtimeReset": "重設為預設"
   },
   "zh-Hans": {
     "title": "SSD2R 工具 — 符文之语规划器",
@@ -85,9 +85,10 @@
     "planner.lowCostHint": "成本低于 1 Ist：直接刷女伯爵就能掉齐需要的低符文。",
     "planner.tradeList": "交易清单（额外掉落）",
     "cost.title": "成本拆解",
-    "drops.title": "可预期掉落（只计整数）",
+    "drops.title": "预测掉落",
     "drops.keysets": "Keyset",
-    "drops.bonusTitle": "抽奖掉落（概率）",
+    "drops.bonusTitle": "可能的 Bonus（不保证）",
+    "drops.vexPlusChance": "Vex+（至少 1 颗）概率",
     "nav.back": "← 返回",
     "nav.keyPipeline": "Key Pipeline",
     "phase.1": "第 1 阶段",
@@ -104,7 +105,6 @@
     "inputs.runtime.summoner": "Summoner 平均用时(min)：",
     "inputs.runtime.nihil": "Nihlathak 平均用时(min)：",
     "inputs.runtimeNote": "只会保存在你的浏览器（localStorage）。",
-    "inputs.runtimeReset": "重置为默认",
-    "drops.vexPlusChance": "至少 1 颗 Vex+"
+    "inputs.runtimeReset": "重置为默认"
   }
 }

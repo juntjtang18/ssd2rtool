@@ -20,6 +20,11 @@
 
 import { getRuneQuote } from "./priceTable.js";
 import { computeTheoryFromHours } from "./modelCore.js";
+import { computeMapEvModel, deriveRunTcCounts } from "./mapEvCore.js";
+
+// Default: items rarer than 1:250 are treated as "lottery" (bonus) revenue.
+// Items with per-kill drop probability >= 1/250 are treated as "predictable" income.
+const DEFAULT_PREDICTABLE_MIN_PROB = 1 / 250;
 
 function splitExtras(extras) {
   const regular = [];
@@ -56,6 +61,108 @@ function buildDropRateMaps(extras) {
     }
   }
   return { dropRateRegular, dropRateBonus };
+}
+
+// ------------------------------
+// TC-derived drop model (preferred)
+// ------------------------------
+
+function buildItemMaxProb({ runTcCounts, tcDropTable, priceTable, phase }) {
+  const tcTable = tcDropTable?.tc ?? tcDropTable ?? {};
+  const phaseData = priceTable?.phases?.[String(phase)] ?? {};
+  const out = {}; // itemKeyUpper -> maxProb
+
+  for (const [tcName, Nt] of Object.entries(runTcCounts ?? {})) {
+    const n = Number(Nt ?? 0);
+    if (!(n > 0)) continue;
+    const drops = tcTable?.[tcName];
+    if (!drops) continue;
+
+    for (const [itemRaw, pRaw] of Object.entries(drops)) {
+      const prob = Number(pRaw ?? 0);
+      if (!(prob > 0)) continue;
+
+      // Only track priced items (consistent with EV accounting).
+      const q = getRuneQuote(priceTable, phase, itemRaw);
+      const key = String(q?.key ?? itemRaw ?? "").trim().toUpperCase();
+      const priced = Number(q?.priceIst ?? 0) > 0;
+      if (!key || !priced) continue;
+
+      out[key] = Math.max(out[key] ?? 0, prob);
+    }
+  }
+  return out;
+}
+
+function mergeExpectedDropsAll(mapEvModel) {
+  const p = mapEvModel?.predictable?.expectedDrops ?? {};
+  const l = mapEvModel?.lottery?.expectedDrops ?? {};
+  const out = { ...p };
+  for (const [k, v] of Object.entries(l)) {
+    out[k] = Number(out[k] ?? 0) + Number(v ?? 0);
+  }
+  return out;
+}
+
+function buildRotationDropModelFromTc({ tcDropTable, keyRuns, priceTable, phase, predictableMinProb }) {
+  const phaseData = priceTable?.phases?.[String(phase)] ?? {};
+  const minProb = Number(predictableMinProb ?? DEFAULT_PREDICTABLE_MIN_PROB);
+
+  const bosses = [
+    { id: "countess", run: keyRuns?.countess },
+    { id: "summoner", run: keyRuns?.summoner },
+    { id: "nihl", run: keyRuns?.nihl },
+  ];
+
+  const byBoss = {};
+  const maxProbByItem = {}; // global max prob across all bosses
+  const expDropsByBoss = {}; // bossId -> item -> expectedDropsPerRun
+  const vexPlusLambdaPerRun = {}; // bossId -> lambda per run for Vex+
+
+  for (const b of bosses) {
+    if (!b.run) continue;
+    const runTcCounts = deriveRunTcCounts({}, b.run);
+    const m = computeMapEvModel({ runTcCounts, tcDropTable, phaseData, predictableMinProb: minProb });
+    byBoss[b.id] = m;
+
+    expDropsByBoss[b.id] = mergeExpectedDropsAll(m);
+
+    const maxProbLocal = buildItemMaxProb({ runTcCounts, tcDropTable, priceTable, phase });
+    for (const [k, p] of Object.entries(maxProbLocal)) {
+      maxProbByItem[k] = Math.max(maxProbByItem[k] ?? 0, Number(p ?? 0));
+    }
+
+    const vex = m?.lottery?.vexPlusExpected ?? {};
+    vexPlusLambdaPerRun[b.id] = Object.values(vex).reduce((a, x) => a + Number(x || 0), 0);
+  }
+
+  // Union of items across bosses.
+  const items = new Set();
+  for (const bm of Object.values(expDropsByBoss)) {
+    for (const k of Object.keys(bm ?? {})) items.add(k);
+  }
+
+  // Build combined per-item drop rates by boss.
+  const combined = {};
+  for (const keyCanon of items) {
+    const kUpper = String(keyCanon).trim().toUpperCase();
+    const pMax = Number(maxProbByItem[kUpper] ?? 0);
+    const bucket = pMax >= minProb ? "predictable" : "lottery";
+
+    const dprC = Number(expDropsByBoss?.countess?.[keyCanon] ?? 0);
+    const dprS = Number(expDropsByBoss?.summoner?.[keyCanon] ?? 0);
+    const dprN = Number(expDropsByBoss?.nihl?.[keyCanon] ?? 0);
+    const dprTotalPerRotationRun = dprC + dprS + dprN;
+    if (!(dprTotalPerRotationRun > 0)) continue;
+
+    // Ensure this item is priced (defensive).
+    const q = getRuneQuote(priceTable, phase, keyCanon);
+    if (!(Number(q?.priceIst ?? 0) > 0)) continue;
+
+    combined[keyCanon] = { name: q.key ?? keyCanon, dprC, dprS, dprN, maxProb: pMax, bucket };
+  }
+
+  return { minProb, combined, vexPlusLambdaPerRun };
 }
 
 // Convert a theory schedule into "practical/bankable" snapshot:
@@ -137,6 +244,88 @@ function practicalFromSchedule({ schedule, extras, priceTable, phase }) {
   };
 }
 
+// Same output shape as practicalFromSchedule, but drops are derived from tc-drop-table
+// and include Countess + Summoner + Nihlathak.
+function practicalFromScheduleTc({ schedule, dropModel, priceTable, phase }) {
+  const Rc = Number(schedule?.runs?.Rc ?? 0);
+  const Rs = Number(schedule?.runs?.Rs ?? 0);
+  const Rn = Number(schedule?.runs?.Rn ?? 0);
+
+  // Keys (trim fractions)
+  const T = Math.floor(Number(schedule?.keys?.terror ?? 0));
+  const H = Math.floor(Number(schedule?.keys?.hate ?? 0));
+  const D = Math.floor(Number(schedule?.keys?.destruction ?? 0));
+  const keysets = Math.min(T, H, D);
+
+  const items = dropModel?.combined ?? {};
+
+  let extrasBankableIst = 0;
+  const extraRows = []; // predictable
+  let bonusPossibleIst = 0;
+  const bonusRows = []; // lottery
+
+  for (const it of Object.values(items)) {
+    const name0 = String(it?.name ?? "").trim();
+    if (!name0) continue;
+
+    const dprC = Number(it?.dprC ?? 0);
+    const dprS = Number(it?.dprS ?? 0);
+    const dprN = Number(it?.dprN ?? 0);
+
+    const pieces = Rc * dprC + Rs * dprS + Rn * dprN;
+    const piecesInt = Math.floor(pieces);
+
+    const q = getRuneQuote(priceTable, phase, name0); // {O,N,priceIst,key}
+    if (!q || !(q.O > 0) || !(q.N > 0)) continue;
+
+    const orders = Math.floor(piecesInt / q.O);
+    const bank = orders * q.N;
+    const row = {
+      name: q.key ?? name0,
+      piecesInt,
+      O: q.O,
+      orders,
+      ist: bank,
+      N: q.N,
+      dropRate: Number(it?.maxProb ?? 0),
+    };
+
+    if (String(it?.bucket) === "predictable") {
+      if (orders > 0) extrasBankableIst += bank;
+      extraRows.push(row);
+    } else {
+      bonusPossibleIst += bank;
+      bonusRows.push(row);
+    }
+  }
+
+  extraRows.sort((a, b) => (b.ist || 0) - (a.ist || 0));
+  bonusRows.sort((a, b) => (b.ist || 0) - (a.ist || 0));
+
+  const keysValueIst = keysets; // 1 keyset = 1 Ist
+  const totalBankableIst = keysValueIst + extrasBankableIst;
+
+  // Vex+ odds for the whole schedule (Poisson on combined lambda)
+  const lam =
+    Rc * Number(dropModel?.vexPlusLambdaPerRun?.countess ?? 0) +
+    Rs * Number(dropModel?.vexPlusLambdaPerRun?.summoner ?? 0) +
+    Rn * Number(dropModel?.vexPlusLambdaPerRun?.nihl ?? 0);
+  const vexPlusChance = 1 - Math.exp(-Math.max(0, lam));
+
+  return {
+    keys: { T, H, D, keysets },
+    bankable: {
+      keysIst: keysValueIst,
+      extrasIst: extrasBankableIst,
+      totalIst: totalBankableIst,
+      possibleBonusIst: bonusPossibleIst,
+      vexPlusChance,
+    },
+    extraRows,
+    bonusRows,
+  };
+}
+
 /**
  * Planner API used by runewords-planner.html
  *
@@ -152,6 +341,10 @@ export function planRotationToTargetIst({
   priceTable,
   params,
   buffer = 1.0,
+  // Optional: if provided, we derive drops from tc-drop-table instead of hard-coded extras.
+  tcDropTable = null,
+  keyRuns = null,
+  predictableMinProb = DEFAULT_PREDICTABLE_MIN_PROB,
 }) {
   const Dc = Number(params.Dc);
   const Ds = Number(params.Ds);
@@ -166,6 +359,13 @@ export function planRotationToTargetIst({
   }
 
   const extras = Array.isArray(params.extras) ? params.extras : [];
+
+  const useTcModel = !!(tcDropTable && keyRuns && priceTable);
+
+  const dropModel = useTcModel
+    ? buildRotationDropModelFromTc({ tcDropTable, keyRuns, priceTable, phase, predictableMinProb })
+    : null;
+
   const { dropRateRegular, dropRateBonus } = buildDropRateMaps(extras);
 
   const target = Math.ceil(Number(targetIst) * buffer);
@@ -188,7 +388,9 @@ export function planRotationToTargetIst({
 
   const practicalTotal = (hours) => {
     const sched = theorySchedule(hours);
-    const snap = practicalFromSchedule({ schedule: sched, extras, priceTable, phase });
+    const snap = useTcModel
+      ? practicalFromScheduleTc({ schedule: sched, dropModel, priceTable, phase })
+      : practicalFromSchedule({ schedule: sched, extras, priceTable, phase });
     return { sched, snap, total: snap.bankable.totalIst };
   };
 
@@ -251,13 +453,15 @@ export function planRotationToTargetIst({
       extras: snap.extraRows.map((r) => ({
         name: r.name,
         pcs: r.piecesInt,
-        dropRate: dropRateRegular[String(r.name || "").toUpperCase()] ?? 0,
+        dropRate: useTcModel ? Number(r.dropRate ?? 0) : (dropRateRegular[String(r.name || "").toUpperCase()] ?? 0),
       })),
       bonus: snap.bonusRows.map((r) => ({
         name: r.name,
         pcs: r.piecesInt,
-        dropRate: dropRateBonus[String(r.name || "").toUpperCase()] ?? 0,
+        dropRate: useTcModel ? Number(r.dropRate ?? 0) : (dropRateBonus[String(r.name || "").toUpperCase()] ?? 0),
       })),
+      vexPlusChance: useTcModel ? Number(snap.bankable?.vexPlusChance ?? 0) : 0,
+      predictableMinProb: useTcModel ? Number(dropModel?.minProb ?? 0) : 0,
     },
 
     // Bankable accounting (practical)
@@ -266,6 +470,7 @@ export function planRotationToTargetIst({
       extrasIst: snap.bankable.extrasIst,
       totalIst: snap.bankable.totalIst,
       possibleBonusIst: snap.bankable.possibleBonusIst,
+      vexPlusChance: snap.bankable?.vexPlusChance ?? 0,
     },
 
     // For planner UI (trade list)
