@@ -1,6 +1,6 @@
 {
   "en": {
-    "title": "SSD2R Tool",
+    "title": "Strong Game Lab D2R Tools",
     "subtitle": "A small toolbox for D2R planning and calculators.",
     "lang.title": "Language",
     "lang.aria": "Select language",
@@ -15,7 +15,7 @@
     "tools.runewordsPlanner": "Runewords Planner (target → farming plan)"
   },
   "zh-Hant": {
-    "title": "SSD2R 工具",
+    "title": "斯壯游戏基地 D2R 工具",
     "subtitle": "暗黑2重製版：一些計算與規劃小工具。",
     "lang.title": "語言",
     "lang.aria": "選擇語言",
@@ -30,7 +30,7 @@
     "tools.runewordsPlanner": "符文之語規劃器（目標 → 刷圖計畫）"
   },
   "zh-Hans": {
-    "title": "SSD2R 工具",
+    "title": "斯壯游戏基地 D2R 工具",
     "subtitle": "暗黑2重制版：一些计算与规划小工具。",
     "lang.title": "语言",
     "lang.aria": "选择语言",
