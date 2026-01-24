@@ -231,6 +231,8 @@
     let priceTable = null;
     let runewordsData = null;
     let modelDefaults = null;
+    let tcDropTable = null;
+    let keyRuns = null;
 
     // i18n
     let dict = null;
@@ -248,6 +250,28 @@
       if (!res.ok) throw new Error(`Failed to load model-parameters.json: HTTP ${res.status}`);
       const json = await res.json();
       return json.defaults;
+    }
+
+    async function loadTcDropTable() {
+      const res = await fetch("../config/tc/tc-drop-table.hell.p1.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to load tc-drop-table: HTTP ${res.status}`);
+      return await res.json();
+    }
+
+    async function loadKeyRuns() {
+      const [c, s, n] = await Promise.all([
+        fetch("../config/map_runs/tower-cellar-5.hell.p1.run.json", { cache: "no-store" }),
+        fetch("../config/map_runs/arcane-sanctuary.hell.p1.run.json", { cache: "no-store" }),
+        fetch("../config/map_runs/nilh-halls.hell.p1.run.json", { cache: "no-store" }),
+      ]);
+      if (!c.ok) throw new Error(`Failed to load countess map_run: HTTP ${c.status}`);
+      if (!s.ok) throw new Error(`Failed to load summoner map_run: HTTP ${s.status}`);
+      if (!n.ok) throw new Error(`Failed to load nihl map_run: HTTP ${n.status}`);
+      return {
+        countess: await c.json(),
+        summoner: await s.json(),
+        nihl: await n.json(),
+      };
     }
 
     async function initI18n() {
@@ -399,42 +423,35 @@
       }
     }
 
-    // Show all drops defined in drop table with dropRate >= 5% (regular extras),
-    // regardless of price. Bonus shown as "Possible Bonus" (pcs>=1).
+    // Predicted drops table:
+    // - Always shows keysets
+    // - Shows predictable items (integer-only)
+    // - Shows lottery probabilities for Vex+/Lo+/Jah+
     function renderPredictedDrops(plan) {
-      const extras = (plan.predictedDrops && Array.isArray(plan.predictedDrops.extras))
-        ? plan.predictedDrops.extras
-        : [];
-      const bonus = (plan.predictedDrops && Array.isArray(plan.predictedDrops.bonus))
-        ? plan.predictedDrops.bonus
-        : [];
+      const pd = plan?.predictedDrops ?? {};
+      const predictable = Array.isArray(pd.predictable)
+        ? pd.predictable
+        : (Array.isArray(pd.extras) ? pd.extras : []);
 
-      const MIN_RATE = 0.05; // 5%
+      const bonusLegacy = Array.isArray(pd.bonus) ? pd.bonus : [];
+      const probs = pd.lotteryProbs ?? null;
+
       const MIN_PCS = 1;
 
-      const getRateFromDefaults = (name) => {
-        const n = String(name || "").toUpperCase();
-        const arr = Array.isArray(modelDefaults?.extras) ? modelDefaults.extras : [];
-        const found = arr.find(x =>
-          String(x.name || x.id || "").toUpperCase().replace(/^BONUS\s*/i,"") === n
-        );
-        const dpr = Number(found?.dropPerRun ?? found?.D ?? found?.rate);
-        return Number.isFinite(dpr) ? dpr : 0;
+      const fmtPct = (p) => {
+        const x = Number(p ?? 0);
+        if (!(x > 0)) return "0%";
+        if (x < 0.0001) return "<0.01%";
+        if (x < 0.01) return `${(x * 100).toFixed(2)}%`;
+        return `${(x * 100).toFixed(1)}%`;
       };
 
-      const rate = (x) => {
-        const r = Number(x.dropRate);
-        if (Number.isFinite(r) && r > 0) return r;
-        return getRateFromDefaults(x.name);
-      };
+      const predictableShown = predictable
+        .map(x => ({ name: x.name, pcs: Number(x.pcs || 0) }))
+        .filter(x => x.pcs >= MIN_PCS)
+        .sort((a,b) => b.pcs - a.pcs);
 
-      const extrasShown = extras
-        .map(x => ({ ...x, __r: rate(x) }))
-        .filter(x => Number(x.pcs || 0) >= MIN_PCS)
-        .filter(x => x.__r >= MIN_RATE)
-        .sort((a,b) => b.__r - a.__r);
-
-      const bonusShown = bonus
+      const bonusShown = bonusLegacy
         .filter(x => Number(x.pcs || 0) >= MIN_PCS)
         .sort((a,b) => Number(b.pcs||0) - Number(a.pcs||0));
 
@@ -453,13 +470,26 @@
         return row;
       };
 
-      // Always show keysets
+      // Keysets
       els.dropsTable.appendChild(tr(t("drops.keysets"), String(plan.keys.keysets), "k"));
 
-      for (const x of extrasShown) {
+      // Predictable drops
+      for (const x of predictableShown) {
+        if (!x.name || x.name === "UKEY") continue;
         els.dropsTable.appendChild(tr(x.name, asInt(x.pcs)));
       }
 
+      // Lottery probabilities (preferred)
+      if (probs) {
+        els.dropsTable.appendChild(tr("", ""));
+        els.dropsTable.appendChild(tr(t("drops.lotteryTitle"), "", "muted"));
+        els.dropsTable.appendChild(tr(t("drops.vexPlus"), fmtPct(probs.vexPlus)));
+        els.dropsTable.appendChild(tr(t("drops.loPlus"), fmtPct(probs.loPlus)));
+        els.dropsTable.appendChild(tr(t("drops.jahPlus"), fmtPct(probs.jahPlus)));
+        return;
+      }
+
+      // Legacy bonus (kept for backwards compatibility)
       if (bonusShown.length) {
         els.dropsTable.appendChild(tr("", ""));
         els.dropsTable.appendChild(tr(t("drops.bonusTitle"), "", "muted"));
@@ -629,8 +659,8 @@
         phase,
         priceTable,
         params: getParamsWithRuntimeOverrides(),
-        tcDropTable: cfg.tcDropTable,
-        keyRuns: cfg.keyRuns,
+        tcDropTable,
+        keyRuns,
         buffer: 1.0
       });
 
@@ -645,6 +675,8 @@
     priceTable = await loadPriceTable();
     runewordsData = await loadRunewords();
     modelDefaults = await loadModelDefaults();
+    tcDropTable = await loadTcDropTable();
+    keyRuns = await loadKeyRuns();
 
     loadRuntimeOverridesIntoInputs();
 
