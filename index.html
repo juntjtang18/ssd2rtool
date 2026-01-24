@@ -3,44 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Strong D2R Tools</title>
+  <title>SSD2R Tool</title>
   <style>
     :root { --bg:#0b0d10; --card:#12161c; --text:#e7eef7; --muted:#9db0c6; --line:#223041; --accent:#7bdcff; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 22px 16px 40px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius: 14px; padding: 14px; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
+    .tiny { color:var(--muted); font-size: 12px; line-height: 1.55; }
 
-    .wrap { max-width: 980px; margin: 0 auto; padding: 18px 14px 40px; }
-    .topbar { display:flex; gap: 14px; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-    h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: 0.2px; }
-    h2 { margin: 0 0 12px; font-size: 18px; }
-    .tiny { color: var(--muted); font-size: 13px; margin: 0; }
+    .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    h1 { margin: 6px 0 8px; font-size: 22px; }
 
-    .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 16px; }
-    .card + .card { margin-top: 14px; }
-    ul { margin: 0; padding-left: 18px; }
-    li { margin: 8px 0; }
+    /* Brand title: logo + localized title text */
+    .brandTitle { display:flex; flex-direction:column; align-items:center; gap:10px; margin: 6px 0 8px; }
+    .brandLogo { height: 120px; width: auto; max-height:120px; display:block; object-fit:contain; }
+    .brandTitleText { font-size: 22px; line-height: 1.2; }
 
-    .langbox { display:flex; gap: 8px; align-items: center; }
-    .langbox .globe { opacity: 0.9; }
+    .langbox { display:flex; align-items:center; gap:8px; margin-top: 6px; }
+    .langbox .globe { font-size: 16px; opacity:.9; }
     .langbox select { width: 140px; padding: 10px 10px; border-radius: 10px; border: 1px solid var(--line); background:#0f1318; color:var(--text); font-size: 14px; }
-
-    .hero { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: #0f1318; margin: 18px 0 14px; text-align: center; }
-    .brandImg { display:block; width: min(520px, 92%); height: auto; margin: 16px auto 10px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.12); }
-    .brandBanner { height: 8px; background: linear-gradient(90deg, rgba(123,220,255,0.0), rgba(123,220,255,0.85), rgba(123,220,255,0.0)); }
-    .brandTitle { margin: 12px 12px 14px; font-size: 26px; line-height: 1.2; letter-spacing: 0.2px; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="hero">
-      <img id="brandImg" class="brandImg" src="./images/StrongSoldier-Brand(120).png" alt="Strong Soldier" />
-      <div class="brandBanner"></div>
-      <h1 class="brandTitle" data-i18n="title">Strong D2R Tools</h1>
-    </div>
-
     <div class="topbar">
       <div>
+        <h1 class="brandTitle">
+          <img id="brandImg" class="brandLogo" src="./images/StrongSoldier-Brand-en(120).png" alt="StrongSoldier" />
+          <span class="brandTitleText" data-i18n="title">SSD2R Tool</span>
+        </h1>
         <p class="tiny" data-i18n="subtitle">A small toolbox for D2R planning and calculators.</p>
       </div>
 
@@ -62,6 +55,7 @@
         <li><a href="./pages/rpk.html" data-i18n="tools.rpk">Boss RPK Leaderboard (Ist per kill)</a></li>
         <li><a href="./pages/rune-drops.html" data-i18n="tools.runeDrops">Boss Rune Drop Rates (table)</a></li>
         <li><a href="./pages/runewords-planner.html" data-i18n="tools.runewordsPlanner">Runewords Planner (target → farming plan)</a></li>
+        <!-- later: <li><a href="./pages/infinity.html">Infinity calculator</a></li> -->
       </ul>
     </div>
   </div>
@@ -84,12 +78,10 @@
       document.title = t("title");
       applyI18nToDom(t);
 
-      // Swap brand image by language
-      if (els.brandImg) {
-        els.brandImg.src = (lang === "en")
-          ? "./images/StrongSoldier-Brand-en(120).png"
-          : "./images/StrongSoldier-Brand(120).png";
-      }
+      // Switch brand logo by language (EN uses -en image; zh uses default).
+      const isEn = lang === "en";
+      els.brandImg.src = isEn ? "./images/StrongSoldier-Brand-en(120).png" : "./images/StrongSoldier-Brand(120).png";
+      els.brandImg.alt = isEn ? "StrongSoldier" : "斯壮游戏基地";
 
       els.langSel.value = lang;
     }
