@@ -754,68 +754,65 @@ function savePriceOverrides(phase, overrides) {
         tbl.appendChild(tr);
       }
 
-            // Attach listeners (live re-plan on edits)
-            // Attach once; always read the *current* phase/base at commit time.
-            if (!tbl.__ptListenerAttached) {
-              tbl.__ptListenerAttached = true;
+      // Remove any previous listener attached by prior renders
+      if (tbl._ptOnEdit) {
+        tbl.removeEventListener("input", tbl._ptOnEdit);
+        tbl.removeEventListener("change", tbl._ptOnEdit);
+      }
 
-              const debounce = (fn, ms = 120) => {
-                let t;
-                return (...args) => {
-                  clearTimeout(t);
-                  t = setTimeout(() => fn(...args), ms);
-                };
-              };
+      const debounce = (fn, ms = 120) => {
+        let t;
+        return (...args) => {
+          clearTimeout(t);
+          t = setTimeout(() => fn(...args), ms);
+        };
+      };
 
-              const commitEdit = debounce((target) => {
-                const item = target?.getAttribute("data-pt-item");
-                if (!item) return;
+      const commit = debounce((target) => {
+        const item = target.getAttribute("data-pt-item");
+        if (!item) return;
 
-                const phaseNow = els.phase.value;
-                const baseNow = getPhasePriceTable(priceTable, phaseNow);
+        const phaseNow = els.phase.value;
+        const baseNow = getPhasePriceTable(priceTable, phaseNow);
+        const baseRow = normalizeQuote(baseNow[item]);
 
-                const row = target.closest("tr");
-                if (!row) return;
+        const oInp = tbl.querySelector(`input[data-pt-item="${CSS.escape(item)}"][data-pt-field="O"]`);
+        const nInp = tbl.querySelector(`input[data-pt-item="${CSS.escape(item)}"][data-pt-field="N"]`);
 
-                const baseRow = normalizeQuote(baseNow[item]);
+        const vO = parseInt(oInp?.value ?? "", 10);
+        const vN = parseInt(nInp?.value ?? "", 10);
 
-                // Read BOTH fields so editing one cell still keeps the other intact.
-                const oInp = row.querySelector('input[data-pt-field="O"]');
-                const nInp = row.querySelector('input[data-pt-field="N"]');
+        const O = Number.isFinite(vO) && vO >= 1 ? vO : Number(baseRow.O);
+        const N = Number.isFinite(vN) && vN >= 1 ? vN : Number(baseRow.N);
 
-                const vO = parseInt(oInp?.value ?? "", 10);
-                const vN = parseInt(nInp?.value ?? "", 10);
+        const overrides = loadPriceOverrides(phaseNow);
 
-                const O = Number.isFinite(vO) && vO >= 1 ? vO : Number(baseRow.O);
-                const N = Number.isFinite(vN) && vN >= 1 ? vN : Number(baseRow.N);
+        // If equals base, remove override
+        const eqO = Number(O) === Number(baseRow.O);
+        const eqN = Number(N) === Number(baseRow.N);
+        if (eqO && eqN) {
+          delete overrides[item];
+        } else {
+          overrides[item] = { O: Math.round(O), N: Math.round(N) };
+        }
 
-                const overrides = loadPriceOverrides(phaseNow);
+        savePriceOverrides(phaseNow, overrides);
 
-                // If equals base, remove override
-                const eqO = Number(O) === Number(baseRow.O);
-                const eqN = Number(N) === Number(baseRow.N);
-                if (eqO && eqN) {
-                  delete overrides[item];
-                } else {
-                  overrides[item] = { O: Math.round(O), N: Math.round(N) };
-                }
+        // Recalculate using the updated price table.
+        calc();
+      }, 120);
 
-                savePriceOverrides(phaseNow, overrides);
-                calc();
-              }, 120);
+      const onEdit = (e) => {
+        const target = e.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        if (!target.matches('input[data-pt-item][data-pt-field]')) return;
+        commit(target);
+      };
 
-              const onEdit = (e) => {
-                const target = e.target;
-                if (!(target instanceof HTMLInputElement)) return;
-                if (!target.matches('input[data-pt-item][data-pt-field]')) return;
-                commitEdit(target);
-              };
-
-              // `input` fires immediately while typing; `change` is a fallback on blur.
-              tbl.addEventListener("input", onEdit);
-              tbl.addEventListener("change", onEdit);
-            }
-
+      tbl._ptOnEdit = onEdit;
+      tbl.addEventListener("input", onEdit);   // immediate while typing
+      tbl.addEventListener("change", onEdit);  // fallback on blur
+    }
 
     function readPositiveNumber(x, fallback) {
       const n = Number(x);
@@ -897,9 +894,8 @@ function savePriceOverrides(phase, overrides) {
       renderTradeList(plan);
       renderPredictedDrops(plan);
     }
-
     // init
-    (async function main() {
+    (async () => {
       await initI18n();
 
       priceTable = await loadPriceTable();
@@ -908,8 +904,7 @@ function savePriceOverrides(phase, overrides) {
       tcDropTable = await loadTcDropTable();
       keyRuns = await loadKeyRuns();
 
-      // IMPORTANT: set phase BEFORE rendering price editor.
-      // Otherwise listeners may save overrides under the wrong phase key.
+      // Phase must be set BEFORE rendering phase-dependent UI like the price table editor.
       setPhaseDefault();
 
       loadRuntimeOverridesIntoInputs();
