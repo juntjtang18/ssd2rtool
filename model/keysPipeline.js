@@ -121,7 +121,11 @@ function practicalFromSchedule({ schedule, extras, priceTable, phase }) {
   }
   bonusRows.sort((a, b) => (b.ist || 0) - (a.ist || 0));
 
-  const keysValueIst = keysets; // 1 keyset = 1 Ist
+  // Keyset value comes from the price table row `UKEY` (Ist per keyset).
+  // If missing/unpriced, fall back to 1 Ist per keyset.
+  const ukeyQ = getRuneQuote(priceTable, phase, "UKEY");
+  const keysetPriceIst = (ukeyQ && Number(ukeyQ.priceIst) > 0) ? Number(ukeyQ.priceIst) : 1;
+  const keysValueIst = keysets * keysetPriceIst;
   const totalBankableIst = keysValueIst + extrasBankableIst;
 
   return {
@@ -254,7 +258,11 @@ function practicalFromScheduleTc({ schedule, priceTable, phase, tcCtx }) {
 
   extraRows.sort((a, b) => (b.ist || 0) - (a.ist || 0));
 
-  const keysValueIst = keysets;
+  // Keyset value comes from the price table row `UKEY` (Ist per keyset).
+  // If missing/unpriced, fall back to 1 Ist per keyset.
+  const ukeyQ = getRuneQuote(priceTable, phase, "UKEY");
+  const keysetPriceIst = (ukeyQ && Number(ukeyQ.priceIst) > 0) ? Number(ukeyQ.priceIst) : 1;
+  const keysValueIst = keysets * keysetPriceIst;
   const totalBankableIst = keysValueIst + extrasBankableIst;
 
   // Lottery probabilities: Vex+, Lo+, Jah+ (>=1) over the whole plan.
