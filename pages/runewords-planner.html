@@ -899,46 +899,50 @@ function savePriceOverrides(phase, overrides) {
     }
 
     // init
-    await initI18n();
+    (async function main() {
+      await initI18n();
 
-    priceTable = await loadPriceTable();
-    runewordsData = await loadRunewords();
-    modelDefaults = await loadModelDefaults();
-    tcDropTable = await loadTcDropTable();
-    keyRuns = await loadKeyRuns();
+      priceTable = await loadPriceTable();
+      runewordsData = await loadRunewords();
+      modelDefaults = await loadModelDefaults();
+      tcDropTable = await loadTcDropTable();
+      keyRuns = await loadKeyRuns();
 
-    // IMPORTANT: set phase BEFORE rendering price editor.
-    // Otherwise listeners may save overrides under the wrong phase key.
-    setPhaseDefault();
+      // IMPORTANT: set phase BEFORE rendering price editor.
+      // Otherwise listeners may save overrides under the wrong phase key.
+      setPhaseDefault();
 
-    loadRuntimeOverridesIntoInputs();
-    renderPriceEditor();
-    renderRunewordOptions();
-
-
-    // lang selector
-    els.langSel.value = currentLang;
-    els.langSel.addEventListener("change", () => applyLang(els.langSel.value, { rerender: true }));
-
-    els.calc.addEventListener("click", calc);
-    els.phase.addEventListener("change", () => { renderPriceEditor(); calc(); });
-    els.rw.addEventListener("change", calc);
-    els.q.addEventListener("input", () => { renderRunewordOptions(); calc(); });
-
-    // runtime overrides
-    const rtChanged = () => { saveRuntimeOverridesFromInputs(); calc(); };
-    els.tC.addEventListener("change", rtChanged);
-    els.tS.addEventListener("change", rtChanged);
-    els.tN.addEventListener("change", rtChanged);
-    els.resetTimes.addEventListener("click", () => { resetRuntimeOverrides(); calc(); });
-    els.resetPrices.addEventListener("click", () => {
-      const phase = els.phase.value;
-      resetPriceOverrides(phase);
+      loadRuntimeOverridesIntoInputs();
       renderPriceEditor();
-      calc();
-    });
+      renderRunewordOptions();
 
-    calc();
+      // lang selector
+      els.langSel.value = currentLang;
+      els.langSel.addEventListener("change", () => applyLang(els.langSel.value, { rerender: true }));
+
+      els.calc.addEventListener("click", calc);
+      els.phase.addEventListener("change", () => { renderPriceEditor(); calc(); });
+      els.rw.addEventListener("change", calc);
+      els.q.addEventListener("input", () => { renderRunewordOptions(); calc(); });
+
+      // runtime overrides
+      const rtChanged = () => { saveRuntimeOverridesFromInputs(); calc(); };
+      els.tC.addEventListener("change", rtChanged);
+      els.tS.addEventListener("change", rtChanged);
+      els.tN.addEventListener("change", rtChanged);
+      els.resetTimes.addEventListener("click", () => { resetRuntimeOverrides(); calc(); });
+      els.resetPrices.addEventListener("click", () => {
+        const phase = els.phase.value;
+        resetPriceOverrides(phase);
+        renderPriceEditor();
+        calc();
+      });
+
+      calc();
+    })().catch((err) => {
+      console.error(err);
+      alert("Runewords Planner init failed. Open DevTools console for details.");
+    });
   </script>
 </body>
 </html>
