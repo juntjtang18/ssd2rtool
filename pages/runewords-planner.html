@@ -754,35 +754,43 @@ function savePriceOverrides(phase, overrides) {
         tbl.appendChild(tr);
       }
 
-      // Attach listeners (event delegation)
-      tbl.querySelectorAll("input[data-pt-item]").forEach(inp => {
-        inp.addEventListener("change", () => {
-          const item = inp.getAttribute("data-pt-item");
-          const field = inp.getAttribute("data-pt-field"); // O or N
-          const baseRow = normalizeQuote(base[item]);
+            // Attach listeners (live re-plan on edits)
+            tbl.querySelectorAll("input[data-pt-item]").forEach(inp => {
+              const commit = () => {
+                const item = inp.getAttribute("data-pt-item");
+                const baseRow = normalizeQuote(base[item]);
 
-          const overrides = loadPriceOverrides(phase);
-          const next = overrides[item] ? { ...overrides[item] } : {};
+                // Read both fields so editing just one cell still keeps the other intact.
+                const oInp = tbl.querySelector(`input[data-pt-item="${item}"][data-pt-field="O"]`);
+                const nInp = tbl.querySelector(`input[data-pt-item="${item}"][data-pt-field="N"]`);
 
-          const v = parseInt(inp.value, 10);
-          if (field === "O") next.O = Number.isFinite(v) && v >= 1 ? v : Number(baseRow.O);
-          if (field === "N") next.N = Number.isFinite(v) && v >= 1 ? v : Number(baseRow.N);
+                const vO = parseInt(oInp?.value ?? "", 10);
+                const vN = parseInt(nInp?.value ?? "", 10);
 
-          // If equals base, remove override
-          const eqO = Number(next.O) === Number(baseRow.O);
-          const eqN = Number(next.N) === Number(baseRow.N);
-          if (eqO && eqN) {
-            delete overrides[item];
-          } else {
-            overrides[item] = { O: Math.round(next.O), N: Math.round(next.N) };
+                const O = Number.isFinite(vO) && vO >= 1 ? vO : Number(baseRow.O);
+                const N = Number.isFinite(vN) && vN >= 1 ? vN : Number(baseRow.N);
+
+                const overrides = loadPriceOverrides(phase);
+
+                // If equals base, remove override
+                const eqO = Number(O) === Number(baseRow.O);
+                const eqN = Number(N) === Number(baseRow.N);
+                if (eqO && eqN) {
+                  delete overrides[item];
+                } else {
+                  overrides[item] = { O: Math.round(O), N: Math.round(N) };
+                }
+
+                savePriceOverrides(phase, overrides);
+                // Recalculate using the updated price table.
+                calc();
+              };
+
+              // `input` fires immediately while editing; `change` is a fallback on blur.
+              inp.addEventListener("input", commit);
+              inp.addEventListener("change", commit);
+            });
           }
-          savePriceOverrides(phase, overrides);
-          // Recalculate using the updated price table.
-          calc();
-        });
-      });
-    }
-
 
     function readPositiveNumber(x, fallback) {
       const n = Number(x);
