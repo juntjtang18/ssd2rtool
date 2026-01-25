@@ -220,7 +220,18 @@
       return String(Math.ceil(n));
     }
 
-    const els = {
+    
+
+    // price editor live-update binding (attached once)
+    let priceEditorBound = false;
+    const debounce = (fn, ms = 120) => {
+      let t;
+      return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), ms);
+      };
+    };
+const els = {
       langSel: el("langSel"),
 
       phase: el("phase"),
@@ -754,67 +765,58 @@ function savePriceOverrides(phase, overrides) {
         tbl.appendChild(tr);
       }
 
-      // Remove any previous listener attached by prior renders
-      if (tbl._ptOnEdit) {
-        tbl.removeEventListener("input", tbl._ptOnEdit);
-        tbl.removeEventListener("change", tbl._ptOnEdit);
+
+  // Attach listeners (delegation + live re-plan). Bound once; safe across rerenders.
+  if (!priceEditorBound) {
+    priceEditorBound = true;
+    const tblEl = els.priceTableEditor;
+
+    const commit = debounce((target) => {
+      const item = target.getAttribute("data-pt-item");
+      if (!item) return;
+
+      const phaseNow = els.phase.value;
+      const baseNow = getPhasePriceTable(priceTable, phaseNow);
+      const baseRow = normalizeQuote(baseNow[item] || { O: 1, N: 1 });
+
+      const oInp = tblEl.querySelector(`input[data-pt-item="${CSS.escape(item)}"][data-pt-field="O"]`);
+      const nInp = tblEl.querySelector(`input[data-pt-item="${CSS.escape(item)}"][data-pt-field="N"]`);
+
+      const vO = parseInt(oInp?.value ?? "", 10);
+      const vN = parseInt(nInp?.value ?? "", 10);
+
+      const O = Number.isFinite(vO) && vO >= 1 ? vO : Number(baseRow.O);
+      const N = Number.isFinite(vN) && vN >= 1 ? vN : Number(baseRow.N);
+
+      const overrides = loadPriceOverrides(phaseNow);
+
+      // If equals base, remove override
+      const eqO = Number(O) === Number(baseRow.O);
+      const eqN = Number(N) === Number(baseRow.N);
+      if (eqO && eqN) {
+        delete overrides[item];
+      } else {
+        overrides[item] = { O: Math.round(O), N: Math.round(N) };
       }
 
-      const debounce = (fn, ms = 120) => {
-        let t;
-        return (...args) => {
-          clearTimeout(t);
-          t = setTimeout(() => fn(...args), ms);
-        };
-      };
+      savePriceOverrides(phaseNow, overrides);
+      calc();
+    }, 120);
 
-      const commit = debounce((target) => {
-        const item = target.getAttribute("data-pt-item");
-        if (!item) return;
+    const onEdit = (e) => {
+      const target = e.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      if (!target.matches('input[data-pt-item][data-pt-field]')) return;
+      commit(target);
+    };
 
-        const phaseNow = els.phase.value;
-        const baseNow = getPhasePriceTable(priceTable, phaseNow);
-        const baseRow = normalizeQuote(baseNow[item]);
+    tblEl.addEventListener("input", onEdit);
+    tblEl.addEventListener("change", onEdit);
+  }
 
-        const oInp = tbl.querySelector(`input[data-pt-item="${CSS.escape(item)}"][data-pt-field="O"]`);
-        const nInp = tbl.querySelector(`input[data-pt-item="${CSS.escape(item)}"][data-pt-field="N"]`);
+}
 
-        const vO = parseInt(oInp?.value ?? "", 10);
-        const vN = parseInt(nInp?.value ?? "", 10);
-
-        const O = Number.isFinite(vO) && vO >= 1 ? vO : Number(baseRow.O);
-        const N = Number.isFinite(vN) && vN >= 1 ? vN : Number(baseRow.N);
-
-        const overrides = loadPriceOverrides(phaseNow);
-
-        // If equals base, remove override
-        const eqO = Number(O) === Number(baseRow.O);
-        const eqN = Number(N) === Number(baseRow.N);
-        if (eqO && eqN) {
-          delete overrides[item];
-        } else {
-          overrides[item] = { O: Math.round(O), N: Math.round(N) };
-        }
-
-        savePriceOverrides(phaseNow, overrides);
-
-        // Recalculate using the updated price table.
-        calc();
-      }, 120);
-
-      const onEdit = (e) => {
-        const target = e.target;
-        if (!(target instanceof HTMLInputElement)) return;
-        if (!target.matches('input[data-pt-item][data-pt-field]')) return;
-        commit(target);
-      };
-
-      tbl._ptOnEdit = onEdit;
-      tbl.addEventListener("input", onEdit);   // immediate while typing
-      tbl.addEventListener("change", onEdit);  // fallback on blur
-    }
-
-    function readPositiveNumber(x, fallback) {
+function readPositiveNumber(x, fallback) {
       const n = Number(x);
       return Number.isFinite(n) && n > 0 ? n : fallback;
     }
@@ -894,50 +896,44 @@ function savePriceOverrides(phase, overrides) {
       renderTradeList(plan);
       renderPredictedDrops(plan);
     }
+
     // init
-    (async () => {
-      await initI18n();
+    await initI18n();
 
-      priceTable = await loadPriceTable();
-      runewordsData = await loadRunewords();
-      modelDefaults = await loadModelDefaults();
-      tcDropTable = await loadTcDropTable();
-      keyRuns = await loadKeyRuns();
+    priceTable = await loadPriceTable();
+    runewordsData = await loadRunewords();
+    modelDefaults = await loadModelDefaults();
+    tcDropTable = await loadTcDropTable();
+    keyRuns = await loadKeyRuns();
 
-      // Phase must be set BEFORE rendering phase-dependent UI like the price table editor.
-      setPhaseDefault();
+    loadRuntimeOverridesIntoInputs();
 
-      loadRuntimeOverridesIntoInputs();
+    setPhaseDefault();
+    renderPriceEditor();
+    renderRunewordOptions();
+// lang selector
+    els.langSel.value = currentLang;
+    els.langSel.addEventListener("change", () => applyLang(els.langSel.value, { rerender: true }));
+
+    els.calc.addEventListener("click", calc);
+    els.phase.addEventListener("change", () => { renderPriceEditor(); calc(); });
+    els.rw.addEventListener("change", calc);
+    els.q.addEventListener("input", () => { renderRunewordOptions(); calc(); });
+
+    // runtime overrides
+    const rtChanged = () => { saveRuntimeOverridesFromInputs(); calc(); };
+    els.tC.addEventListener("change", rtChanged);
+    els.tS.addEventListener("change", rtChanged);
+    els.tN.addEventListener("change", rtChanged);
+    els.resetTimes.addEventListener("click", () => { resetRuntimeOverrides(); calc(); });
+    els.resetPrices.addEventListener("click", () => {
+      const phase = els.phase.value;
+      resetPriceOverrides(phase);
       renderPriceEditor();
-      renderRunewordOptions();
-
-      // lang selector
-      els.langSel.value = currentLang;
-      els.langSel.addEventListener("change", () => applyLang(els.langSel.value, { rerender: true }));
-
-      els.calc.addEventListener("click", calc);
-      els.phase.addEventListener("change", () => { renderPriceEditor(); calc(); });
-      els.rw.addEventListener("change", calc);
-      els.q.addEventListener("input", () => { renderRunewordOptions(); calc(); });
-
-      // runtime overrides
-      const rtChanged = () => { saveRuntimeOverridesFromInputs(); calc(); };
-      els.tC.addEventListener("change", rtChanged);
-      els.tS.addEventListener("change", rtChanged);
-      els.tN.addEventListener("change", rtChanged);
-      els.resetTimes.addEventListener("click", () => { resetRuntimeOverrides(); calc(); });
-      els.resetPrices.addEventListener("click", () => {
-        const phase = els.phase.value;
-        resetPriceOverrides(phase);
-        renderPriceEditor();
-        calc();
-      });
-
       calc();
-    })().catch((err) => {
-      console.error(err);
-      alert("Runewords Planner init failed. Open DevTools console for details.");
     });
+
+    calc();
   </script>
 </body>
 </html>
