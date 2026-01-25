@@ -21,6 +21,20 @@
 import { getRuneQuote } from "./priceTable.js";
 import { computeTheoryFromHours } from "./modelCore.js";
 import { computeMapEvModel } from "./mapEvCore.js";
+// -----------------------------
+// Keyset pricing
+// -----------------------------
+// Price-table convention (same as other items): { O: items, N: ist } => 1 item = N/O Ist.
+// In the UI price table, UKEY refers to an individual key (not a full keyset).
+// Therefore: 1 keyset (T+H+D) = 3 keys => keysetPriceIst = 3 * keyPriceIst.
+// Fallback to 1 Ist per keyset if UKEY is missing/unpriced (legacy behavior).
+function getKeysetPriceIst(priceTable, phase) {
+  const q = getRuneQuote(priceTable, phase, "UKEY");
+  if (!q || !(q.O > 0) || !(q.N > 0)) return 1;
+  const keyPriceIst = Number(q.priceIst ?? (q.N / q.O));
+  if (!(keyPriceIst > 0)) return 1;
+  return 3 * keyPriceIst;
+}
 
 // -----------------------------
 // Legacy extras helper (model-parameters.json extras)
@@ -121,11 +135,8 @@ function practicalFromSchedule({ schedule, extras, priceTable, phase }) {
   }
   bonusRows.sort((a, b) => (b.ist || 0) - (a.ist || 0));
 
-  // Keyset value comes from the price table row `UKEY` (Ist per keyset).
-  // If missing/unpriced, fall back to 1 Ist per keyset.
-  const ukeyQ = getRuneQuote(priceTable, phase, "UKEY");
-  const keysetPriceIst = (ukeyQ && Number(ukeyQ.priceIst) > 0) ? Number(ukeyQ.priceIst) : 1;
-  const keysValueIst = keysets * keysetPriceIst;
+  const keysetPriceIst = getKeysetPriceIst(priceTable, phase);
+  const keysValueIst = keysets * keysetPriceIst; // keysets -> Ist using UKEY price
   const totalBankableIst = keysValueIst + extrasBankableIst;
 
   return {
@@ -258,10 +269,7 @@ function practicalFromScheduleTc({ schedule, priceTable, phase, tcCtx }) {
 
   extraRows.sort((a, b) => (b.ist || 0) - (a.ist || 0));
 
-  // Keyset value comes from the price table row `UKEY` (Ist per keyset).
-  // If missing/unpriced, fall back to 1 Ist per keyset.
-  const ukeyQ = getRuneQuote(priceTable, phase, "UKEY");
-  const keysetPriceIst = (ukeyQ && Number(ukeyQ.priceIst) > 0) ? Number(ukeyQ.priceIst) : 1;
+  const keysetPriceIst = getKeysetPriceIst(priceTable, phase);
   const keysValueIst = keysets * keysetPriceIst;
   const totalBankableIst = keysValueIst + extrasBankableIst;
 
